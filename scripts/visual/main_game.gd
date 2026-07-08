@@ -147,6 +147,14 @@ func _process(delta: float) -> void:
 				style.border_color = Color(0.2, 0.85, 0.4, 0.8) # Green (OK)
 				style.bg_color = Color(0.2, 0.85, 0.4, 0.15)
 				
+	# Update hovered building state
+	var hover_grid_pos = _get_grid_position_under_mouse()
+	var hover_building_id = network.grid.get(hover_grid_pos, 0)
+	for b_id in visuals_map:
+		var visual = visuals_map[b_id]
+		if is_instance_valid(visual):
+			visual.is_hovered = (b_id == hover_building_id)
+			
 	# Auto-save
 	save_timer += delta
 	if save_timer >= AUTO_SAVE_INTERVAL:
@@ -276,6 +284,7 @@ func _create_build_preview() -> void:
 	build_preview = PanelContainer.new()
 	build_preview.custom_minimum_size = Vector2(110, 90)
 	build_preview.visible = false
+	build_preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	
 	var style = StyleBoxFlat.new()
 	style.bg_color = Color(0.2, 0.85, 0.4, 0.15)

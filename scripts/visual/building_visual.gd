@@ -131,6 +131,14 @@ func _create_ui() -> void:
 	buffers_hbox.add_child(outputs_container)
 	
 	add_child(panel)
+	_set_mouse_ignore(panel)
+
+func _set_mouse_ignore(node: Node) -> void:
+	if node is Control:
+		node.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for child in node.get_children():
+		_set_mouse_ignore(child)
+
 
 func _process(_delta: float) -> void:
 	if data == null:

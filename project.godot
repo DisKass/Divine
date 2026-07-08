@@ -11,9 +11,9 @@ config_version=5
 [application]
 
 config/name="My Divine with Antigravity 1"
+run/main_scene="res://scenes/main_game.tscn"
 config/features=PackedStringArray("4.7", "Mobile")
 config/icon="res://icon.svg"
-run/main_scene="res://scenes/main_game.tscn"
 
 [display]
 
