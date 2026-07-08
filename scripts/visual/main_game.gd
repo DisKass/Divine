@@ -14,6 +14,14 @@ var selected_build_type: String = ""
 var selected_building_id: int = 0
 var link_source_id: int = 0
 
+# Building Drag & Panning State
+var _is_dragging_building: bool = false
+var _dragged_building_id: int = 0
+var _drag_building_start_grid: Vector2i
+var _lmb_press_pos: Vector2
+var _has_dragged: bool = false
+var _drag_offset: Vector2 = Vector2.ZERO
+
 # Core Managers
 var network: FactoryNetwork
 var economy: EconomyManager
@@ -152,12 +160,14 @@ func _process(delta: float) -> void:
 				style.bg_color = Color(0.2, 0.85, 0.4, 0.15)
 				
 	# Update hovered building state
-	var hover_grid_pos = _get_grid_position_under_mouse()
-	var hover_building_id = network.grid.get(hover_grid_pos, 0)
+	var hover_building_id = _get_building_id_under_mouse()
 	for b_id in visuals_map:
 		var visual = visuals_map[b_id]
 		if is_instance_valid(visual):
-			visual.is_hovered = (b_id == hover_building_id)
+			if _is_dragging_building and b_id == _dragged_building_id:
+				visual.is_hovered = false
+			else:
+				visual.is_hovered = (b_id == hover_building_id)
 			
 	# Auto-save
 	save_timer += delta
@@ -179,26 +189,119 @@ func _draw() -> void:
 			draw_line(start_pt, end_pt, Color(1.0, 0.9, 0.3, 0.8), 2.0)
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventMouseButton and event.pressed:
+	if event is InputEventMouseButton:
+		var building_id = _get_building_id_under_mouse()
 		var grid_pos = _get_grid_position_under_mouse()
-		var building_id = network.grid.get(grid_pos, 0)
+		if building_id != 0:
+			grid_pos = network.buildings[building_id].grid_position
 		
 		if event.button_index == MOUSE_BUTTON_LEFT:
-			match current_mode:
-				MouseMode.INSPECT:
-					_handle_inspect(building_id)
-				MouseMode.BUILD:
-					_handle_build(grid_pos)
-				MouseMode.LINK:
-					_handle_link(building_id)
-				MouseMode.DEMOLISH:
-					_handle_demolish(building_id)
+			if event.pressed:
+				# Start left click actions
+				_lmb_press_pos = get_global_mouse_position()
+				_has_dragged = false
+				
+				# Drag building: only if we clicked a building and we are in Inspect or Build mode
+				if building_id != 0 and (current_mode == MouseMode.INSPECT or current_mode == MouseMode.BUILD):
+					_is_dragging_building = true
+					_dragged_building_id = building_id
+					_drag_building_start_grid = grid_pos
+					var visual = visuals_map.get(building_id)
+					if is_instance_valid(visual):
+						_drag_offset = visual.global_position - get_global_mouse_position()
+				else:
+					# Otherwise, pan camera using LMB
+					camera.is_panning = true
+			else:
+				# Left mouse button released
+				if camera.is_panning:
+					camera.is_panning = false
+					# If we clicked empty space (not dragged camera), trigger actions
+					if not _has_dragged:
+						if current_mode == MouseMode.LINK:
+							if building_id != 0:
+								_handle_link(building_id)
+							else:
+								# Cancel linking on empty space click
+								_set_mouse_mode(MouseMode.INSPECT)
+						elif current_mode == MouseMode.BUILD:
+							if building_id == 0:
+								_handle_build(grid_pos)
+							else:
+								# Clicked a building in build mode -> inspect it
+								_handle_inspect(building_id)
+						elif current_mode == MouseMode.DEMOLISH:
+							_handle_demolish(building_id)
+						else:
+							# Inspect empty space to deselect
+							_handle_inspect(0)
+							
+				elif _is_dragging_building:
+					var target_grid_pos = _get_grid_position_under_mouse()
+					if _has_dragged:
+						# Complete building relocation
+						var visual = visuals_map.get(_dragged_building_id)
+						if is_instance_valid(visual):
+							if target_grid_pos != _drag_building_start_grid and not network.grid.has(target_grid_pos):
+								# Move in network grid
+								network.grid.erase(_drag_building_start_grid)
+								network.grid[target_grid_pos] = _dragged_building_id
+								
+								# Move building data
+								var b_data = network.buildings[_dragged_building_id]
+								b_data.grid_position = target_grid_pos
+								
+								network.rebuild_caches()
+								
+								# Update visual position
+								visual.position = Vector2(target_grid_pos) * cell_size + Vector2(cell_size / 2.0, cell_size / 2.0)
+								
+								# Force save
+								SaveManager.save_game(network, economy)
+							else:
+								# Cancel move: snap visual back to original position
+								visual.position = Vector2(_drag_building_start_grid) * cell_size + Vector2(cell_size / 2.0, cell_size / 2.0)
+					else:
+						# It was a short click, not a drag: inspect the clicked building
+						var visual = visuals_map.get(_dragged_building_id)
+						if is_instance_valid(visual):
+							# Ensure position is snapped back in case of sub-pixel mouse jitter
+							visual.position = Vector2(_drag_building_start_grid) * cell_size + Vector2(cell_size / 2.0, cell_size / 2.0)
+						
+						if current_mode == MouseMode.DEMOLISH:
+							_handle_demolish(_dragged_building_id)
+						else:
+							_handle_inspect(_dragged_building_id)
+							
+					_is_dragging_building = false
+					_dragged_building_id = 0
 					
 		elif event.button_index == MOUSE_BUTTON_RIGHT:
-			# Cancel build/link modes on RMB
-			if current_mode != MouseMode.INSPECT:
-				_set_mouse_mode(MouseMode.INSPECT)
-				get_viewport().set_input_as_handled()
+			if event.pressed:
+				# RMB on building -> start linking
+				if building_id != 0:
+					_set_mouse_mode(MouseMode.LINK)
+					link_source_id = building_id
+					visuals_map[link_source_id].is_selected = true
+				else:
+					# RMB on empty space -> cancel current non-inspect mode
+					if current_mode != MouseMode.INSPECT:
+						_set_mouse_mode(MouseMode.INSPECT)
+						get_viewport().set_input_as_handled()
+						
+	elif event is InputEventMouseMotion:
+		# Drag threshold checks
+		if _is_dragging_building:
+			var visual = visuals_map.get(_dragged_building_id)
+			if is_instance_valid(visual):
+				# Move visual to follow mouse position, keeping the drag offset
+				visual.global_position = get_global_mouse_position() + _drag_offset
+				if get_global_mouse_position().distance_to(_lmb_press_pos) > 8:
+					_has_dragged = true
+					
+		elif camera.is_panning:
+			if get_global_mouse_position().distance_to(_lmb_press_pos) > 8:
+				_has_dragged = true
 
 func _handle_inspect(building_id: int) -> void:
 	# Deselect current
@@ -304,6 +407,16 @@ func _create_build_preview() -> void:
 	
 	add_child(build_preview)
 
+func _get_building_id_under_mouse() -> int:
+	var m_pos = get_global_mouse_position()
+	for b_id in visuals_map:
+		var visual = visuals_map[b_id]
+		if is_instance_valid(visual):
+			var rect = Rect2(visual.global_position - Vector2(55, 45), Vector2(110, 90))
+			if rect.has_point(m_pos):
+				return b_id
+	return 0
+
 func _get_grid_position_under_mouse() -> Vector2i:
 	var m_pos = get_global_mouse_position()
 	return Vector2i(
@@ -330,10 +443,6 @@ func _set_mouse_mode(mode: MouseMode, build_type: String = "") -> void:
 		
 	var active_btn_name = ""
 	match current_mode:
-		MouseMode.INSPECT:
-			active_btn_name = "inspect"
-		MouseMode.LINK:
-			active_btn_name = "link"
 		MouseMode.DEMOLISH:
 			active_btn_name = "demolish"
 		MouseMode.BUILD:
@@ -494,19 +603,6 @@ func _create_hud() -> void:
 	bot_hbox.add_theme_constant_override("separation", 15)
 	bottom_panel.add_child(bot_hbox)
 	
-	# Tool Buttons
-	var inspect_btn = Button.new()
-	inspect_btn.text = "Inspect"
-	inspect_btn.toggle_mode = true
-	inspect_btn.button_pressed = true
-	inspect_btn.pressed.connect(func(): _set_mouse_mode(MouseMode.INSPECT))
-	bot_hbox.add_child(inspect_btn)
-	tool_buttons["inspect"] = inspect_btn
-	
-	# Separator
-	var vs1 = VSeparator.new()
-	bot_hbox.add_child(vs1)
-	
 	# Build buttons
 	for b_type in ["miner", "smelter", "constructor", "seller"]:
 		var btn = Button.new()
@@ -517,15 +613,8 @@ func _create_hud() -> void:
 		tool_buttons[b_type] = btn
 		
 	# Separator
-	var vs2 = VSeparator.new()
-	bot_hbox.add_child(vs2)
-	
-	var link_btn = Button.new()
-	link_btn.text = "Link Tool"
-	link_btn.toggle_mode = true
-	link_btn.pressed.connect(func(): _set_mouse_mode(MouseMode.LINK))
-	bot_hbox.add_child(link_btn)
-	tool_buttons["link"] = link_btn
+	var vs = VSeparator.new()
+	bot_hbox.add_child(vs)
 	
 	var demolish_btn = Button.new()
 	demolish_btn.text = "Demolish"
