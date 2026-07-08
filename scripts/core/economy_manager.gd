@@ -22,7 +22,7 @@ var cost_configs: Dictionary = {}
 
 func _init() -> void:
 	# Initialize default resources
-	resources["credits"] = 50.0 # Starter credits
+	resources["credits"] = 85.0 # Starter credits
 	
 	# Set up default cost configs
 	cost_configs = {

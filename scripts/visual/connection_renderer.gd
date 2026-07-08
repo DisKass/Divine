@@ -6,7 +6,8 @@ class_name ConnectionRenderer
 @export var line_color: Color = Color(0.2, 0.6, 0.9, 0.6) # Sleek transparent blue
 @export var line_width: float = 3.0
 @export var dot_color: Color = Color(0.5, 0.85, 1.0, 0.9) # Bright glow blue
-@export var flow_speed: float = 1.5 # Dots per second
+@export var flow_speed: float = 120.0 # Flow speed in pixels per second
+@export var dot_spacing: float = 40.0 # Spacing between flowing dots in pixels
 
 var network: FactoryNetwork
 var visuals_map: Dictionary = {} # building_id -> BuildingVisual
@@ -23,8 +24,8 @@ func _draw() -> void:
 	if network == null or visuals_map.is_empty():
 		return
 		
-	# Flow animation time factor
-	var time_factor = (Time.get_ticks_msec() / 1000.0) * flow_speed
+	# Current time in seconds
+	var time_sec = Time.get_ticks_msec() / 1000.0
 	
 	for conn in network.connections:
 		var from_id = conn["from_id"]
@@ -47,12 +48,15 @@ func _draw() -> void:
 		# Draw the base connection pipe line
 		draw_line(start_pt, end_pt, line_color, line_width)
 		
-		# Draw flowing resource dots along the pipe
-		# We draw 3 dots evenly spaced along the pipe to represent flow
-		var num_dots = 3
+		# Draw flowing resource dots along the pipe at a constant speed
+		var distance = start_pt.distance_to(end_pt)
+		if distance < 5.0:
+			continue
+			
+		var num_dots = ceil(distance / dot_spacing)
 		for i in range(num_dots):
-			var offset = float(i) / num_dots
-			# Calculate t from 0 to 1 with looping animation
-			var t = fmod(time_factor + offset, 1.0)
+			# Calculate actual travel distance for this dot with looping
+			var travel_dist = fmod(time_sec * flow_speed + i * dot_spacing, distance)
+			var t = travel_dist / distance
 			var dot_pos = start_pt.lerp(end_pt, t)
 			draw_circle(dot_pos, 2.5, dot_color)

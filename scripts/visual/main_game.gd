@@ -106,6 +106,10 @@ func _initialize_game() -> void:
 		network = FactoryNetwork.from_dict(net_dict)
 		economy = EconomyManager.new()
 		economy.from_dict(eco_dict)
+		# Migrate old starting credits (50$) to new 85$ for fresh profiles
+		var total_buildings = net_dict.get("buildings", []).size()
+		if total_buildings == 0 and economy.get_resource("credits") < 85.0:
+			economy.resources["credits"] = 85.0
 		ticker = SimulationTicker.new(network, economy)
 		
 		# Instantiate visual nodes for all loaded buildings
@@ -238,9 +242,8 @@ func _handle_link(building_id: int) -> void:
 		if link_source_id != building_id:
 			var success = network.add_connection(link_source_id, building_id)
 			if success:
-				# Highlight success briefly
+				# Link created successfully - return to inspect mode without selecting the target
 				_set_mouse_mode(MouseMode.INSPECT)
-				_handle_inspect(building_id)
 			else:
 				# Flash error or just cancel
 				visuals_map[link_source_id].is_selected = false
@@ -420,8 +423,10 @@ func _create_hud() -> void:
 	
 	# Top Menu Panel
 	var top_panel = PanelContainer.new()
-	top_panel.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
+	canvas.add_child(top_panel)
 	top_panel.custom_minimum_size = Vector2(0, 50)
+	top_panel.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
+	top_panel.offset_bottom = 50
 	
 	var top_style = StyleBoxFlat.new()
 	top_style.bg_color = Color(0.06, 0.08, 0.1, 0.85)
@@ -470,12 +475,13 @@ func _create_hud() -> void:
 	top_margin_r.custom_minimum_size = Vector2(10, 0)
 	top_hbox.add_child(top_margin_r)
 	
-	canvas.add_child(top_panel)
-	
 	# Bottom Toolbar Panel
 	var bottom_panel = PanelContainer.new()
-	bottom_panel.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
+	canvas.add_child(bottom_panel)
 	bottom_panel.custom_minimum_size = Vector2(0, 60)
+	bottom_panel.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
+	bottom_panel.offset_top = -60
+	bottom_panel.offset_bottom = 0
 	
 	var bot_style = StyleBoxFlat.new()
 	bot_style.bg_color = Color(0.06, 0.08, 0.1, 0.85)
@@ -528,12 +534,13 @@ func _create_hud() -> void:
 	bot_hbox.add_child(demolish_btn)
 	tool_buttons["demolish"] = demolish_btn
 	
-	canvas.add_child(bottom_panel)
-	
 	# Right Inspector Panel
 	inspector_panel = PanelContainer.new()
-	inspector_panel.set_anchors_and_offsets_preset(Control.PRESET_RIGHT_WIDE)
+	canvas.add_child(inspector_panel)
 	inspector_panel.custom_minimum_size = Vector2(250, 0)
+	inspector_panel.set_anchors_and_offsets_preset(Control.PRESET_RIGHT_WIDE)
+	inspector_panel.offset_left = -250
+	inspector_panel.offset_right = 0
 	# Add offset from top/bottom HUD panels
 	inspector_panel.offset_top = 60
 	inspector_panel.offset_bottom = -70
@@ -565,9 +572,6 @@ func _create_hud() -> void:
 	inspector_details.text = ""
 	inspector_details.add_theme_font_size_override("font_size", 11)
 	insp_vbox.add_child(inspector_details)
-	
-	canvas.add_child(inspector_panel)
-	
 	# Popup dialog setup for offline catchup
 	popup_dialog = AcceptDialog.new()
 	popup_dialog.title = "Offline Production"

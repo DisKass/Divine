@@ -66,10 +66,26 @@ func add_connection(from_id: int, to_id: int) -> bool:
 	if not buildings.has(from_id) or not buildings.has(to_id):
 		return false
 		
-	# Check if connection already exists
-	for conn in connections:
-		if conn["from_id"] == from_id and conn["to_id"] == to_id:
-			return false
+	var from_b = buildings[from_id]
+	var to_b = buildings[to_id]
+	
+	# Verify that the output of from_b matches at least one input of to_b
+	var has_matching_resource = false
+	for out_res in from_b.outputs:
+		if to_b.inputs.has(out_res):
+			has_matching_resource = true
+			break
+			
+	if not has_matching_resource:
+		return false
+		
+	# Remove any existing connection originating from from_id (only one output link allowed)
+	var i = 0
+	while i < connections.size():
+		if connections[i]["from_id"] == from_id:
+			connections.remove_at(i)
+		else:
+			i += 1
 			
 	connections.append({
 		"from_id": from_id,
@@ -177,7 +193,7 @@ func to_dict() -> Dictionary:
 ## Deserializes and restores the factory network.
 static func from_dict(dict: Dictionary) -> FactoryNetwork:
 	var net = FactoryNetwork.new()
-	net.next_id = dict.get("next_id", 1)
+	net.next_id = int(dict.get("next_id", 1))
 	
 	var serialized_buildings = dict.get("buildings", [])
 	for b_dict in serialized_buildings:
@@ -185,6 +201,13 @@ static func from_dict(dict: Dictionary) -> FactoryNetwork:
 		net.buildings[b.id] = b
 		net.grid[b.grid_position] = b.id
 		
-	net.connections = dict.get("connections", []).duplicate(true)
+	net.connections = []
+	var raw_conns = dict.get("connections", [])
+	for conn in raw_conns:
+		net.connections.append({
+			"from_id": int(conn.get("from_id", 0)),
+			"to_id": int(conn.get("to_id", 0))
+		})
+		
 	net.rebuild_caches()
 	return net

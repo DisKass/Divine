@@ -55,10 +55,10 @@ func verify_economy_rules() -> void:
 	print("Demolishing Miner 2...")
 	economy.refund_building("miner")
 	print("Miner Count: ", economy.building_counts.get("miner"), ", Credits: ", economy.get_resource("credits"))
-	if economy.get_resource("credits") == 50.0:
-		print("[PASS] 100% refund successfully restored credits to 50.0.")
+	if economy.get_resource("credits") == 85.0:
+		print("[PASS] 100% refund successfully restored credits to 85.0.")
 	else:
-		print("[FAIL] Refund did not restore correct credits. Expected 50.0, got: ", economy.get_resource("credits"))
+		print("[FAIL] Refund did not restore correct credits. Expected 85.0, got: ", economy.get_resource("credits"))
 
 func verify_resource_flow() -> void:
 	print("\n--- Verifying Resource Flow and Production ---")

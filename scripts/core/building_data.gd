@@ -103,9 +103,9 @@ func to_dict() -> Dictionary:
 
 ## Deserializes building data state from dictionary.
 static func from_dict(dict: Dictionary) -> BuildingData:
-	var pos = Vector2i(dict["grid_position"][0], dict["grid_position"][1])
+	var pos = Vector2i(int(dict["grid_position"][0]), int(dict["grid_position"][1]))
 	var recipe = dict.get("active_recipe", {}).duplicate()
-	var b = BuildingData.new(dict["id"], dict["type"], pos, recipe)
+	var b = BuildingData.new(int(dict["id"]), dict["type"], pos, recipe)
 	
 	b.inputs = dict.get("inputs", {}).duplicate()
 	b.input_limits = dict.get("input_limits", {}).duplicate()

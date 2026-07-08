@@ -71,9 +71,9 @@ func _create_ui() -> void:
 	
 	# Inside panel: VBoxContainer
 	var vbox = VBoxContainer.new()
+	panel.add_child(vbox)
 	vbox.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	vbox.add_theme_constant_override("separation", 2)
-	panel.add_child(vbox)
 	
 	# 1. Title (Type name)
 	title_label = Label.new()
@@ -207,8 +207,8 @@ func _update_resource_list(container: VBoxContainer, resources: Dictionary, limi
 		if resources.has(res_name):
 			var val = resources[res_name]
 			var limit = limits.get(res_name, 20.0)
-			# Format resource name (first 3 chars or complete)
-			var short_name = res_name.substr(0, 4)
+			# Format resource name (remove "iron_" prefix for cleanliness)
+			var short_name = res_name.replace("iron_", "")
 			# Color coding for resources
 			var col_tag = "[color=#ff8888]" if is_input else "[color=#88ff88]"
 			child.text = "%s: %.1f" % [short_name, val]
