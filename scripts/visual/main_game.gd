@@ -84,11 +84,11 @@ func _ready() -> void:
 	# 2. Setup build preview phantom
 	_create_build_preview()
 	
-	# 3. Load or Init Core Simulation
-	_initialize_game()
-	
-	# 4. Setup GUI Layout
+	# 3. Setup GUI Layout
 	_create_hud()
+	
+	# 4. Load or Init Core Simulation
+	_initialize_game()
 	
 	# Connect to tick signal to update UI
 	ticker.tick_completed.connect(_on_simulation_tick)
