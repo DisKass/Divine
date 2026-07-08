@@ -1,6 +1,8 @@
 extends Node2D
 class_name MainGame
 
+const Recipes = preload("res://scripts/core/recipes.gd")
+
 ## Main Game Controller. Coordinates simulation, UI, mouse modes, and save management.
 
 enum MouseMode { INSPECT, BUILD, LINK, DEMOLISH }
@@ -44,35 +46,38 @@ var inspector_panel: PanelContainer
 var inspector_details: Label
 var popup_dialog: AcceptDialog
 
-# Default recipes for placing buildings
-var default_recipes: Dictionary = {
-	"miner": {
-		"inputs": {},
-		"outputs": { "iron_ore": 1.0 },
-		"duration": 1.0
-	},
-	"smelter": {
-		"inputs": { "iron_ore": 1.0 },
-		"outputs": { "iron_plate": 1.0 },
-		"duration": 1.0
-	},
-	"constructor": {
-		"inputs": { "iron_plate": 1.0 },
-		"outputs": { "iron_gear": 1.0 },
-		"duration": 1.0
-	},
-	"seller": {
-		"inputs": { "iron_gear": 1.0 },
-		"outputs": { "credits": 5.0 },
-		"duration": 1.0
-	}
+# Card UI references and Drag state
+var tool_cost_labels: Dictionary = {}
+var _scroll_container: ScrollContainer
+var _is_scrolling_drag: bool = false
+var _scroll_drag_start_pos: Vector2
+var _scroll_drag_start_val: int
+var _scroll_has_dragged: bool = false
+
+const BUILDING_DESCRIPTIONS: Dictionary = {
+	"miner_iron": "➔ Iron Ore",
+	"miner_coal": "➔ Coal",
+	"miner_crystal": "➔ Mana Crystal",
+	"crusher": "Ore ➔ Dust",
+	"smelter": "Ore ➔ Plate/Ingot",
+	"constructor": "Plate ➔ Gear",
+	"alchemy_lab": "Dust ➔ Essence",
+	"artifact_altar": "Ingot ➔ Amulet",
+	"seller": "Goods ➔ Credits"
 }
+
+# Default recipes for placing buildings, populated dynamically from Recipes database
+var default_recipes: Dictionary = {}
 
 # Auto-save timer
 var save_timer: float = 0.0
 const AUTO_SAVE_INTERVAL: float = 5.0
 
 func _ready() -> void:
+	# Populate default recipes from Recipes database
+	for b_type in Recipes.DATA:
+		default_recipes[b_type] = Recipes.DATA[b_type][0]
+
 	# 1. Setup Camera and drawing nodes
 	camera = GameCamera.new()
 	camera.position = Vector2.ZERO
@@ -461,28 +466,40 @@ func _update_ui() -> void:
 	credits_label.text = "Credits: $%.1f (+%.1f/s)" % [credits, credits_per_tick]
 	
 	# 2. Update stats
-	var miners = economy.building_counts.get("miner", 0)
+	var miners = economy.building_counts.get("miner", 0) + economy.building_counts.get("miner_iron", 0) + economy.building_counts.get("miner_coal", 0) + economy.building_counts.get("miner_crystal", 0)
 	var smelters = economy.building_counts.get("smelter", 0)
 	var constructors = economy.building_counts.get("constructor", 0)
 	var sellers = economy.building_counts.get("seller", 0)
-	stats_label.text = "Miners: %d | Smelters: %d | Constructors: %d | Sellers: %d" % [miners, smelters, constructors, sellers]
+	var crushers = economy.building_counts.get("crusher", 0)
+	var labs = economy.building_counts.get("alchemy_lab", 0)
+	var altars = economy.building_counts.get("artifact_altar", 0)
+	stats_label.text = "Miners: %d | Crushers: %d | Smelters: %d | Constructors: %d | Labs: %d | Altars: %d | Sellers: %d" % [
+		miners, crushers, smelters, constructors, labs, altars, sellers
+	]
 	
 	# 3. Update building cost tags on buttons
-	for b_type in ["miner", "smelter", "constructor", "seller"]:
+	for b_type in ["miner_iron", "miner_coal", "miner_crystal", "crusher", "smelter", "constructor", "alchemy_lab", "artifact_altar", "seller"]:
 		if tool_buttons.has(b_type):
 			var btn: Button = tool_buttons[b_type]
 			var cost = economy.get_building_cost(b_type)
-			if cost.is_empty():
-				btn.text = "%s (Free)" % b_type.capitalize()
-			else:
-				var cost_val = cost.get("credits", 0.0)
-				btn.text = "%s ($%.1f)" % [b_type.capitalize(), cost_val]
+			var price_lbl = tool_cost_labels.get(b_type)
+			if price_lbl:
+				if cost.is_empty():
+					price_lbl.text = "Free"
+				else:
+					var cost_val = cost.get("credits", 0.0)
+					price_lbl.text = "$%.1f" % cost_val
 				
 			# Disable if cannot afford (unless already selected to prevent sudden deselections)
-			if not economy.can_afford(b_type) and current_mode != MouseMode.BUILD:
+			var is_selected_type = (current_mode == MouseMode.BUILD and selected_build_type == b_type)
+			if not economy.can_afford(b_type) and not is_selected_type:
 				btn.disabled = true
+				if price_lbl:
+					price_lbl.add_theme_color_override("font_color", Color(0.9, 0.3, 0.3))
 			else:
 				btn.disabled = false
+				if price_lbl:
+					price_lbl.add_theme_color_override("font_color", Color(1.0, 0.9, 0.3))
 
 func _update_inspector() -> void:
 	var b_data = network.buildings.get(selected_building_id)
@@ -496,7 +513,7 @@ func _update_inspector() -> void:
 	text += "-------------------------\n"
 	
 	if not b_data.active_recipe.is_empty():
-		text += "Recipe: %s\n" % str(b_data.active_recipe)
+		text += "Recipe: %s\n" % b_data.active_recipe.get("name", b_data.active_recipe.get("id", "Unknown"))
 		text += "Progress: %.2f / %.1f\n" % [b_data.production_progress, float(b_data.active_recipe.get("duration", 1.0))]
 	else:
 		text += "Recipe: None\n"
@@ -511,6 +528,44 @@ func _update_inspector() -> void:
 		text += "  - %s: %.1f / %.1f\n" % [res, b_data.outputs[res], b_data.output_limits.get(res, 20.0)]
 		
 	inspector_details.text = text
+
+	# Update Recipe OptionButton
+	var recipe_container = inspector_panel.find_child("RecipeSelectorContainer", true, false)
+	var recipe_button: OptionButton = inspector_panel.find_child("RecipeOptionButton", true, false)
+	
+	if recipe_container and recipe_button:
+		var possible_recipes = Recipes.DATA.get(b_data.type, [])
+		if possible_recipes.size() > 1:
+			recipe_container.visible = true
+			recipe_button.clear()
+			
+			var active_recipe_id = b_data.active_recipe.get("id", "")
+			var select_idx = 0
+			for i in range(possible_recipes.size()):
+				var recipe = possible_recipes[i]
+				recipe_button.add_item(recipe.get("name", recipe.get("id", "Unknown")))
+				if recipe.get("id", "") == active_recipe_id:
+					select_idx = i
+					
+			recipe_button.selected = select_idx
+			
+			if recipe_button.item_selected.is_connected(_on_recipe_selected):
+				recipe_button.item_selected.disconnect(_on_recipe_selected)
+			recipe_button.item_selected.connect(_on_recipe_selected)
+		else:
+			recipe_container.visible = false
+
+func _on_recipe_selected(idx: int) -> void:
+	var b_data = network.buildings.get(selected_building_id)
+	if b_data == null:
+		return
+	var possible_recipes = Recipes.DATA.get(b_data.type, [])
+	if idx >= 0 and idx < possible_recipes.size():
+		var new_recipe = possible_recipes[idx].duplicate(true)
+		b_data.set_recipe(new_recipe)
+		network.rebuild_caches()
+		_update_inspector()
+		SaveManager.save_game(network, economy)
 
 func _create_hud() -> void:
 	var canvas = CanvasLayer.new()
@@ -573,9 +628,9 @@ func _create_hud() -> void:
 	# Bottom Toolbar Panel
 	var bottom_panel = PanelContainer.new()
 	canvas.add_child(bottom_panel)
-	bottom_panel.custom_minimum_size = Vector2(0, 60)
+	bottom_panel.custom_minimum_size = Vector2(0, 150)
 	bottom_panel.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
-	bottom_panel.offset_top = -60
+	bottom_panel.offset_top = -150
 	bottom_panel.offset_bottom = 0
 	
 	var bot_style = StyleBoxFlat.new()
@@ -584,30 +639,37 @@ func _create_hud() -> void:
 	bot_style.border_color = Color(0.3, 0.6, 1.0, 0.5)
 	bottom_panel.add_theme_stylebox_override("panel", bot_style)
 	
-	var bot_hbox = HBoxContainer.new()
-	bot_hbox.alignment = BoxContainer.ALIGNMENT_CENTER
-	bot_hbox.add_theme_constant_override("separation", 15)
-	bottom_panel.add_child(bot_hbox)
+	var bot_margin = MarginContainer.new()
+	bot_margin.add_theme_constant_override("margin_left", 10)
+	bot_margin.add_theme_constant_override("margin_right", 10)
+	bot_margin.add_theme_constant_override("margin_top", 10)
+	bot_margin.add_theme_constant_override("margin_bottom", 10)
+	bottom_panel.add_child(bot_margin)
 	
-	# Build buttons
-	for b_type in ["miner", "smelter", "constructor", "seller"]:
-		var btn = Button.new()
-		btn.text = b_type.capitalize()
-		btn.toggle_mode = true
-		btn.pressed.connect(func(): _set_mouse_mode(MouseMode.BUILD, b_type))
-		bot_hbox.add_child(btn)
-		tool_buttons[b_type] = btn
+	_scroll_container = ScrollContainer.new()
+	_scroll_container.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	_scroll_container.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_scroll_container.mouse_filter = Control.MOUSE_FILTER_PASS
+	bot_margin.add_child(_scroll_container)
+	_scroll_container.gui_input.connect(func(event): _on_button_gui_input("", event))
+	
+	var bot_hbox = HBoxContainer.new()
+	bot_hbox.alignment = BoxContainer.ALIGNMENT_BEGIN
+	bot_hbox.add_theme_constant_override("separation", 12)
+	_scroll_container.add_child(bot_hbox)
+	
+	# Build buttons (cards)
+	var card_types = ["miner_iron", "miner_coal", "miner_crystal", "crusher", "smelter", "constructor", "alchemy_lab", "artifact_altar", "seller"]
+	for b_type in card_types:
+		_create_building_card(bot_hbox, b_type)
 		
 	# Separator
 	var vs = VSeparator.new()
+	vs.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	bot_hbox.add_child(vs)
 	
-	var demolish_btn = Button.new()
-	demolish_btn.text = "Demolish"
-	demolish_btn.toggle_mode = true
-	demolish_btn.pressed.connect(func(): _set_mouse_mode(MouseMode.DEMOLISH))
-	bot_hbox.add_child(demolish_btn)
-	tool_buttons["demolish"] = demolish_btn
+	# Demolish button (card)
+	_create_building_card(bot_hbox, "demolish")
 	
 	# Right Inspector Panel
 	inspector_panel = PanelContainer.new()
@@ -618,7 +680,7 @@ func _create_hud() -> void:
 	inspector_panel.offset_right = 0
 	# Add offset from top/bottom HUD panels
 	inspector_panel.offset_top = 60
-	inspector_panel.offset_bottom = -70
+	inspector_panel.offset_bottom = -160
 	inspector_panel.visible = false
 	
 	var insp_style = StyleBoxFlat.new()
@@ -647,6 +709,24 @@ func _create_hud() -> void:
 	inspector_details.text = ""
 	inspector_details.add_theme_font_size_override("font_size", 11)
 	insp_vbox.add_child(inspector_details)
+	
+	# Recipe Selector UI container
+	var recipe_container = HBoxContainer.new()
+	recipe_container.name = "RecipeSelectorContainer"
+	recipe_container.visible = false
+	insp_vbox.add_child(recipe_container)
+	
+	var recipe_lbl = Label.new()
+	recipe_lbl.text = "Recipe:"
+	recipe_lbl.add_theme_font_size_override("font_size", 11)
+	recipe_container.add_child(recipe_lbl)
+	
+	var recipe_opt = OptionButton.new()
+	recipe_opt.name = "RecipeOptionButton"
+	recipe_opt.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	recipe_opt.add_theme_font_size_override("font_size", 10)
+	recipe_container.add_child(recipe_opt)
+	
 	# Popup dialog setup for offline catchup
 	popup_dialog = AcceptDialog.new()
 	popup_dialog.title = "Offline Production"
@@ -693,3 +773,166 @@ func _on_reset_pressed() -> void:
 	connection_renderer.setup(network, visuals_map)
 	_set_mouse_mode(MouseMode.INSPECT)
 	_update_ui()
+
+func _get_accent_color(type: String) -> Color:
+	match type:
+		"miner":
+			return Color(0.9, 0.45, 0.1) # Amber / Orange
+		"miner_iron":
+			return Color(0.8, 0.5, 0.3) # Iron brown
+		"miner_coal":
+			return Color(0.3, 0.3, 0.35) # Dark gray
+		"miner_crystal":
+			return Color(0.7, 0.4, 0.9) # Magical purple
+		"crusher":
+			return Color(0.5, 0.5, 0.5) # Steel gray
+		"smelter":
+			return Color(0.95, 0.25, 0.25) # Hot Red
+		"constructor":
+			return Color(0.2, 0.7, 0.9) # Cyan
+		"alchemy_lab":
+			return Color(0.1, 0.8, 0.8) # Teal alchemical glow
+		"artifact_altar":
+			return Color(0.9, 0.8, 0.2) # Golden magic yellow
+		"seller":
+			return Color(0.2, 0.85, 0.4) # Emerald Green
+		"demolish":
+			return Color(0.95, 0.25, 0.25) # Red for Demolish
+		_:
+			return Color(0.7, 0.7, 0.7)
+
+func _create_card_style(accent_color: Color, state: String) -> StyleBoxFlat:
+	var style = StyleBoxFlat.new()
+	style.corner_radius_top_left = 8
+	style.corner_radius_top_right = 8
+	style.corner_radius_bottom_left = 8
+	style.corner_radius_bottom_right = 8
+	style.border_width_left = 2
+	style.border_width_top = 2
+	style.border_width_right = 2
+	style.border_width_bottom = 2
+	
+	match state:
+		"normal":
+			style.bg_color = Color(0.08, 0.1, 0.12, 0.95)
+			style.border_color = accent_color.darkened(0.3)
+			style.shadow_color = Color(0, 0, 0, 0.3)
+			style.shadow_size = 4
+		"hover":
+			style.bg_color = Color(0.12, 0.15, 0.18, 0.95)
+			style.border_color = accent_color.lightened(0.1)
+			style.shadow_color = Color(accent_color.r, accent_color.g, accent_color.b, 0.15)
+			style.shadow_size = 6
+		"pressed":
+			style.bg_color = Color(0.15, 0.2, 0.25, 0.95)
+			style.border_color = Color(1.0, 0.9, 0.3) # Gold selection
+			style.shadow_color = Color(1.0, 0.9, 0.3, 0.25)
+			style.shadow_size = 8
+		"disabled":
+			style.bg_color = Color(0.04, 0.05, 0.06, 0.8)
+			style.border_color = accent_color.darkened(0.7)
+			style.shadow_size = 0
+	return style
+
+func _create_building_card(parent_container: Control, b_type: String) -> void:
+	var btn = Button.new()
+	btn.custom_minimum_size = Vector2(120, 110)
+	btn.toggle_mode = true
+	btn.mouse_filter = Control.MOUSE_FILTER_PASS
+	
+	var color = _get_accent_color(b_type)
+	btn.add_theme_stylebox_override("normal", _create_card_style(color, "normal"))
+	btn.add_theme_stylebox_override("hover", _create_card_style(color, "hover"))
+	btn.add_theme_stylebox_override("pressed", _create_card_style(color, "pressed"))
+	btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	btn.add_theme_stylebox_override("disabled", _create_card_style(color, "disabled"))
+	
+	var vbox = VBoxContainer.new()
+	vbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	vbox.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	vbox.add_theme_constant_override("separation", 4)
+	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	btn.add_child(vbox)
+	
+	var title_lbl = Label.new()
+	if b_type == "demolish":
+		title_lbl.text = "Demolish"
+	elif b_type.begins_with("miner_"):
+		title_lbl.text = b_type.replace("miner_", "").capitalize() + " Miner"
+	else:
+		title_lbl.text = b_type.capitalize()
+		
+	title_lbl.add_theme_font_size_override("font_size", 11)
+	title_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title_lbl.add_theme_color_override("font_color", Color.WHITE)
+	title_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	vbox.add_child(title_lbl)
+	
+	var div = ColorRect.new()
+	div.custom_minimum_size = Vector2(0, 2)
+	div.color = color
+	div.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	vbox.add_child(div)
+	
+	var desc_lbl = Label.new()
+	if b_type == "demolish":
+		desc_lbl.text = "Refund 100%"
+	else:
+		desc_lbl.text = BUILDING_DESCRIPTIONS.get(b_type, "")
+	desc_lbl.add_theme_font_size_override("font_size", 10)
+	desc_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	desc_lbl.add_theme_color_override("font_color", Color(0.6, 0.7, 0.8))
+	desc_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	vbox.add_child(desc_lbl)
+	
+	var price_lbl = Label.new()
+	price_lbl.name = "PriceLabel"
+	price_lbl.add_theme_font_size_override("font_size", 11)
+	price_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	if b_type == "demolish":
+		price_lbl.text = "Action"
+		price_lbl.add_theme_color_override("font_color", Color(0.95, 0.3, 0.3))
+	else:
+		price_lbl.text = "$0.0"
+		price_lbl.add_theme_color_override("font_color", Color(1.0, 0.9, 0.3))
+	price_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	vbox.add_child(price_lbl)
+	
+	btn.gui_input.connect(func(event): _on_button_gui_input(b_type, event))
+	
+	parent_container.add_child(btn)
+	tool_buttons[b_type] = btn
+	if b_type != "demolish":
+		tool_cost_labels[b_type] = price_lbl
+
+func _on_button_gui_input(b_type: String, event: InputEvent) -> void:
+	if event is InputEventMouseButton:
+		if event.button_index == MOUSE_BUTTON_LEFT:
+			if event.pressed:
+				_is_scrolling_drag = true
+				_scroll_drag_start_pos = event.global_position
+				_scroll_drag_start_val = _scroll_container.scroll_horizontal
+				_scroll_has_dragged = false
+			else:
+				_is_scrolling_drag = false
+				if not _scroll_has_dragged and not b_type.is_empty():
+					_on_building_button_pressed(b_type)
+			get_viewport().set_input_as_handled()
+		elif event.button_index == MOUSE_BUTTON_WHEEL_UP:
+			_scroll_container.scroll_horizontal -= 40
+			get_viewport().set_input_as_handled()
+		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+			_scroll_container.scroll_horizontal += 40
+			get_viewport().set_input_as_handled()
+	elif event is InputEventMouseMotion and _is_scrolling_drag:
+		var diff = event.global_position.x - _scroll_drag_start_pos.x
+		if abs(diff) > 8:
+			_scroll_has_dragged = true
+		_scroll_container.scroll_horizontal = _scroll_drag_start_val - int(diff)
+		get_viewport().set_input_as_handled()
+
+func _on_building_button_pressed(b_type: String) -> void:
+	if b_type == "demolish":
+		_set_mouse_mode(MouseMode.DEMOLISH)
+	else:
+		_set_mouse_mode(MouseMode.BUILD, b_type)
