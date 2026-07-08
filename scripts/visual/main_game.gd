@@ -334,18 +334,8 @@ func _handle_link(building_id: int) -> void:
 	else:
 		# We clicked the target building
 		if link_source_id != building_id:
-			var success = network.add_connection(link_source_id, building_id)
-			if success:
-				# Link created successfully - return to inspect mode without selecting the target
-				_set_mouse_mode(MouseMode.INSPECT)
-			else:
-				# Flash error or just cancel
-				visuals_map[link_source_id].is_selected = false
-				link_source_id = 0
-		else:
-			# Cancel if clicking the same building
-			visuals_map[link_source_id].is_selected = false
-			link_source_id = 0
+			network.add_connection(link_source_id, building_id)
+		_set_mouse_mode(MouseMode.INSPECT)
 
 func _handle_demolish(building_id: int) -> void:
 	if building_id == 0:
@@ -730,7 +720,7 @@ func _create_hud() -> void:
 	# Popup dialog setup for offline catchup
 	popup_dialog = AcceptDialog.new()
 	popup_dialog.title = "Offline Production"
-	popup_dialog.dialog_autowrap = true
+	popup_dialog.dialog_autowrap = false
 	canvas.add_child(popup_dialog)
 
 func _show_offline_catchup_popup(data: Dictionary) -> void:
@@ -750,8 +740,17 @@ func _show_offline_catchup_popup(data: Dictionary) -> void:
 		data["simulated_ticks"],
 		data["credits_earned"]
 	]
-	# Defer popup so engine UI is fully setup
-	popup_dialog.call_deferred("popup_centered")
+	# Defer the layout adjustment so popup_centered calculates standard size first
+	_adjust_popup.call_deferred()
+
+func _adjust_popup() -> void:
+	popup_dialog.popup_centered()
+	var current_size = popup_dialog.size
+	var new_width = current_size.x
+	var new_height = current_size.y * 2
+	popup_dialog.min_size = Vector2i(new_width, new_height)
+	popup_dialog.size = Vector2i(new_width, new_height)
+	popup_dialog.popup_centered()
 
 func _on_reset_pressed() -> void:
 	# Clear save game

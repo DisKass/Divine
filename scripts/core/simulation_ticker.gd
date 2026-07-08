@@ -22,9 +22,10 @@ func process_realtime(delta: float) -> void:
 		
 	time_accumulator += delta
 	var ticks_run = 0
-	while time_accumulator >= 1.0:
-		time_accumulator -= 1.0
-		network.tick(1.0, economy)
+	var tick_step = 1.0 / 30.0
+	while time_accumulator >= tick_step:
+		time_accumulator -= tick_step
+		network.tick(tick_step, economy)
 		ticks_run += 1
 		
 	if ticks_run > 0:
