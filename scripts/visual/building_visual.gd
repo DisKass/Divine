@@ -200,8 +200,17 @@ func _update_ui() -> void:
 			style.shadow_color = Color(0, 0, 0, 0.3)
 
 func _update_resource_list(container: VBoxContainer, resources: Dictionary, limits: Dictionary, is_input: bool) -> void:
-	# Clear existing children if mismatch
+	# Rebuild children if count or resource keys mismatch
+	var needs_rebuild = false
 	if container.get_child_count() != resources.size():
+		needs_rebuild = true
+	else:
+		for res in resources:
+			if not container.has_node(res):
+				needs_rebuild = true
+				break
+				
+	if needs_rebuild:
 		for child in container.get_children():
 			child.queue_free()
 			container.remove_child(child)
