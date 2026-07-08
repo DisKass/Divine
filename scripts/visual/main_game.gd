@@ -20,7 +20,6 @@ var _dragged_building_id: int = 0
 var _drag_building_start_grid: Vector2i
 var _lmb_press_pos: Vector2
 var _has_dragged: bool = false
-var _drag_offset: Vector2 = Vector2.ZERO
 
 # Core Managers
 var network: FactoryNetwork
@@ -206,9 +205,6 @@ func _unhandled_input(event: InputEvent) -> void:
 					_is_dragging_building = true
 					_dragged_building_id = building_id
 					_drag_building_start_grid = grid_pos
-					var visual = visuals_map.get(building_id)
-					if is_instance_valid(visual):
-						_drag_offset = visual.global_position - get_global_mouse_position()
 				else:
 					# Otherwise, pan camera using LMB
 					camera.is_panning = true
@@ -237,37 +233,12 @@ func _unhandled_input(event: InputEvent) -> void:
 							_handle_inspect(0)
 							
 				elif _is_dragging_building:
-					var target_grid_pos = _get_grid_position_under_mouse()
 					if _has_dragged:
-						# Complete building relocation
-						var visual = visuals_map.get(_dragged_building_id)
-						if is_instance_valid(visual):
-							if target_grid_pos != _drag_building_start_grid and not network.grid.has(target_grid_pos):
-								# Move in network grid
-								network.grid.erase(_drag_building_start_grid)
-								network.grid[target_grid_pos] = _dragged_building_id
-								
-								# Move building data
-								var b_data = network.buildings[_dragged_building_id]
-								b_data.grid_position = target_grid_pos
-								
-								network.rebuild_caches()
-								
-								# Update visual position
-								visual.position = Vector2(target_grid_pos) * cell_size + Vector2(cell_size / 2.0, cell_size / 2.0)
-								
-								# Force save
-								SaveManager.save_game(network, economy)
-							else:
-								# Cancel move: snap visual back to original position
-								visual.position = Vector2(_drag_building_start_grid) * cell_size + Vector2(cell_size / 2.0, cell_size / 2.0)
+						# Drag completed - building is already at its final grid position!
+						# Just force save the state.
+						SaveManager.save_game(network, economy)
 					else:
 						# It was a short click, not a drag: inspect the clicked building
-						var visual = visuals_map.get(_dragged_building_id)
-						if is_instance_valid(visual):
-							# Ensure position is snapped back in case of sub-pixel mouse jitter
-							visual.position = Vector2(_drag_building_start_grid) * cell_size + Vector2(cell_size / 2.0, cell_size / 2.0)
-						
 						if current_mode == MouseMode.DEMOLISH:
 							_handle_demolish(_dragged_building_id)
 						else:
@@ -292,12 +263,27 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event is InputEventMouseMotion:
 		# Drag threshold checks
 		if _is_dragging_building:
-			var visual = visuals_map.get(_dragged_building_id)
-			if is_instance_valid(visual):
-				# Move visual to follow mouse position, keeping the drag offset
-				visual.global_position = get_global_mouse_position() + _drag_offset
-				if get_global_mouse_position().distance_to(_lmb_press_pos) > 8:
-					_has_dragged = true
+			if get_global_mouse_position().distance_to(_lmb_press_pos) > 8:
+				_has_dragged = true
+				
+			var hover_grid_pos = _get_grid_position_under_mouse()
+			var b_data = network.buildings.get(_dragged_building_id)
+			if b_data and hover_grid_pos != b_data.grid_position:
+				# Only move if the target grid position is empty
+				if not network.grid.has(hover_grid_pos):
+					# Remove from old grid pos
+					network.grid.erase(b_data.grid_position)
+					# Add to new grid pos
+					network.grid[hover_grid_pos] = _dragged_building_id
+					# Update building data pos
+					b_data.grid_position = hover_grid_pos
+					
+					network.rebuild_caches()
+					
+					# Snap visual position to the grid cell center
+					var visual = visuals_map.get(_dragged_building_id)
+					if is_instance_valid(visual):
+						visual.position = Vector2(hover_grid_pos) * cell_size + Vector2(cell_size / 2.0, cell_size / 2.0)
 					
 		elif camera.is_panning:
 			if get_global_mouse_position().distance_to(_lmb_press_pos) > 8:
