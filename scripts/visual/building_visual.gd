@@ -29,10 +29,22 @@ func setup(p_data: BuildingData, p_cell_size: int) -> void:
 	match data.type:
 		"miner":
 			accent_color = Color(0.9, 0.45, 0.1) # Amber / Orange
+		"miner_iron":
+			accent_color = Color(0.8, 0.5, 0.3) # Iron brown
+		"miner_coal":
+			accent_color = Color(0.3, 0.3, 0.35) # Dark gray
+		"miner_crystal":
+			accent_color = Color(0.7, 0.4, 0.9) # Magical purple
+		"crusher":
+			accent_color = Color(0.5, 0.5, 0.5) # Steel gray
 		"smelter":
 			accent_color = Color(0.95, 0.25, 0.25) # Hot Red
 		"constructor":
 			accent_color = Color(0.2, 0.7, 0.9) # Cyan
+		"alchemy_lab":
+			accent_color = Color(0.1, 0.8, 0.8) # Teal alchemical glow
+		"artifact_altar":
+			accent_color = Color(0.9, 0.8, 0.2) # Golden magic yellow
 		"seller":
 			accent_color = Color(0.2, 0.85, 0.4) # Emerald Green
 		_:

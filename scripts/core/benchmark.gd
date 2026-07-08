@@ -1,5 +1,7 @@
 extends SceneTree
 
+const Recipes = preload("res://scripts/core/recipes.gd")
+
 func _init() -> void:
 	print("==================================================")
 	print("Starting Factory Simulation Benchmark & Verification")
@@ -7,6 +9,7 @@ func _init() -> void:
 	
 	verify_economy_rules()
 	verify_resource_flow()
+	verify_multi_recipe_switching()
 	run_performance_benchmark()
 	
 	quit()
@@ -122,6 +125,40 @@ func verify_resource_flow() -> void:
 		print("[PASS] Resource flow and global credit harvesting work correctly.")
 	else:
 		print("[FAIL] Resource flow or harvesting failed. Expected 10.0 credits, got: ", economy.get_resource("credits"))
+
+func verify_multi_recipe_switching() -> void:
+	print("\n--- Verifying Multi-Recipe Switching ---")
+	var net = FactoryNetwork.new()
+	var economy = EconomyManager.new()
+	
+	# Create a smelter
+	var initial_recipe = Recipes.DATA["smelter"][0] # Smelt Iron Plate
+	var smelter = net.add_building("smelter", Vector2i(0, 0), initial_recipe)
+	
+	# Verify initial recipe is "smelt_plate"
+	print("Initial Smelter Recipe ID: ", smelter.active_recipe.get("id"))
+	if smelter.active_recipe.get("id") == "smelt_plate":
+		print("[PASS] Initial recipe matches smelt_plate.")
+	else:
+		print("[FAIL] Initial recipe should be smelt_plate.")
+		
+	# Put some inputs and progress production
+	smelter.inputs["iron_ore"] = 1.0
+	net.tick(0.5, economy)
+	print("Smelter is producing: ", smelter.is_producing, ", progress: ", smelter.production_progress)
+	
+	# Switch recipe to "smelt_ingot"
+	var new_recipe = Recipes.DATA["smelter"][1] # Smelt Iron Ingot
+	smelter.set_recipe(new_recipe)
+	print("Switched Smelter Recipe ID: ", smelter.active_recipe.get("id"))
+	
+	# Verify that buffers and production state were reset
+	print("Is producing after switch: ", smelter.is_producing, ", progress: ", smelter.production_progress)
+	print("Inputs after switch: ", smelter.inputs)
+	if smelter.active_recipe.get("id") == "smelt_ingot" and not smelter.is_producing and smelter.inputs.get("iron_ore", 0.0) == 0.0:
+		print("[PASS] Recipe switch successfully reset state and buffers.")
+	else:
+		print("[FAIL] Recipe switch did not reset state and buffers correctly.")
 
 func run_performance_benchmark() -> void:
 	print("\n--- Running Performance Benchmark (2,000 Buildings) ---")

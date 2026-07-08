@@ -45,6 +45,28 @@ func _init(p_id: int, p_type: String, p_pos: Vector2i, p_recipe: Dictionary = {}
 			# Output buffer limit is 10x recipe requirements or a minimum default of 20
 			output_limits[res] = maxf(r_outputs[res] * 10.0, 20.0)
 
+## Changes the active recipe of the building, resetting production progress and buffers.
+func set_recipe(p_recipe: Dictionary) -> void:
+	active_recipe = p_recipe.duplicate(true)
+	production_progress = 0.0
+	is_producing = false
+	
+	inputs.clear()
+	outputs.clear()
+	input_limits.clear()
+	output_limits.clear()
+	
+	if not active_recipe.is_empty():
+		var r_inputs = active_recipe.get("inputs", {})
+		for res in r_inputs:
+			inputs[res] = 0.0
+			input_limits[res] = maxf(r_inputs[res] * 10.0, 20.0)
+			
+		var r_outputs = active_recipe.get("outputs", {})
+		for res in r_outputs:
+			outputs[res] = 0.0
+			output_limits[res] = maxf(r_outputs[res] * 10.0, 20.0)
+
 ## Simulates a single tick of duration `delta` (usually 1.0 second).
 func tick(delta: float = 1.0) -> void:
 	if active_recipe.is_empty():

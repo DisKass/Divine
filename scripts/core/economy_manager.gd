@@ -5,7 +5,14 @@ extends RefCounted
 
 # Global resources: resource_name (String) -> amount (float)
 var resources: Dictionary = {
-	"credits": 0.0
+	"credits": 0.0,
+	"coal": 0.0,
+	"iron_ingot": 0.0,
+	"mana_crystal": 0.0,
+	"crystal_dust": 0.0,
+	"crushed_iron": 0.0,
+	"mana_essence": 0.0,
+	"runesteel_ingot": 0.0
 }
 
 # Number of active buildings per type: building_type (String) -> count (int)
@@ -23,6 +30,13 @@ var cost_configs: Dictionary = {}
 func _init() -> void:
 	# Initialize default resources
 	resources["credits"] = 85.0 # Starter credits
+	resources["coal"] = 0.0
+	resources["iron_ingot"] = 0.0
+	resources["mana_crystal"] = 0.0
+	resources["crystal_dust"] = 0.0
+	resources["crushed_iron"] = 0.0
+	resources["mana_essence"] = 0.0
+	resources["runesteel_ingot"] = 0.0
 	
 	# Set up default cost configs
 	cost_configs = {
@@ -30,6 +44,26 @@ func _init() -> void:
 			"multiplier": 1.15,
 			"base_costs": {}, # First miner is free!
 			"first_paid_costs": { "credits": 10.0 }
+		},
+		"miner_iron": {
+			"multiplier": 1.15,
+			"base_costs": {}, # First iron miner is free
+			"first_paid_costs": { "credits": 15.0 }
+		},
+		"miner_coal": {
+			"multiplier": 1.15,
+			"base_costs": { "credits": 25.0 },
+			"first_paid_costs": { "credits": 50.0 }
+		},
+		"miner_crystal": {
+			"multiplier": 1.20,
+			"base_costs": { "credits": 75.0 },
+			"first_paid_costs": { "credits": 150.0 }
+		},
+		"crusher": {
+			"multiplier": 1.15,
+			"base_costs": { "credits": 35.0 },
+			"first_paid_costs": { "credits": 70.0 }
 		},
 		"smelter": {
 			"multiplier": 1.18,
@@ -40,6 +74,16 @@ func _init() -> void:
 			"multiplier": 1.20,
 			"base_costs": { "credits": 50.0 },
 			"first_paid_costs": { "credits": 100.0 }
+		},
+		"alchemy_lab": {
+			"multiplier": 1.25,
+			"base_costs": { "credits": 100.0 },
+			"first_paid_costs": { "credits": 200.0 }
+		},
+		"artifact_altar": {
+			"multiplier": 1.30,
+			"base_costs": { "credits": 250.0 },
+			"first_paid_costs": { "credits": 500.0 }
 		},
 		"seller": {
 			"multiplier": 1.12,
