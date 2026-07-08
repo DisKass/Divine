@@ -16,13 +16,6 @@ var selected_build_type: String = ""
 var selected_building_id: int = 0
 var link_source_id: int = 0
 
-# Building Drag & Panning State
-var _is_dragging_building: bool = false
-var _dragged_building_id: int = 0
-var _drag_building_start_grid: Vector2i
-var _lmb_press_pos: Vector2
-var _has_dragged: bool = false
-
 # Core Managers
 var network: FactoryNetwork
 var economy: EconomyManager
@@ -37,6 +30,9 @@ var grid_renderer: GridRenderer
 var connection_renderer: ConnectionRenderer
 var buildings_container: Node2D
 var build_preview: PanelContainer
+
+# Input Controller
+var input_controller: InputController
 
 # UI References (Instantiated from scenes)
 var hud: HUD
@@ -85,6 +81,16 @@ func _ready() -> void:
 	hud.add_child(inspector_panel)
 	inspector_panel.recipe_selected.connect(_on_recipe_selected)
 	
+	# 3.5. Setup Input Controller
+	input_controller = InputController.new()
+	input_controller.cell_size = cell_size
+	add_child(input_controller)
+	input_controller.building_clicked.connect(_on_input_building_clicked)
+	input_controller.building_right_clicked.connect(_on_input_building_right_clicked)
+	input_controller.empty_space_clicked.connect(_on_input_empty_space_clicked)
+	input_controller.building_move_completed.connect(_on_input_building_move_completed)
+	input_controller.link_mode_cancelled.connect(_on_input_link_mode_cancelled)
+	
 	# 4. Load or Init Core Simulation
 	_initialize_game()
 	
@@ -126,17 +132,16 @@ func _initialize_game() -> void:
 		ticker = SimulationTicker.new(network, economy)
 		
 	connection_renderer.setup(network, visuals_map)
+	if is_instance_valid(input_controller):
+		input_controller.setup(camera, network, visuals_map, build_preview)
 
 func _process(delta: float) -> void:
 	# Run simulation ticker ticks
 	ticker.process_realtime(delta)
 	
-	# Process building preview positioning
-	if current_mode == MouseMode.BUILD:
-		var grid_pos = _get_grid_position_under_mouse()
-		build_preview.global_position = Vector2(grid_pos) * cell_size + Vector2(cell_size/2.0 - 55, cell_size/2.0 - 45)
-		
-		# Color red if blocked, green if empty and affordable
+	# Color red if blocked, green if empty and affordable (BUILD preview)
+	if current_mode == MouseMode.BUILD and is_instance_valid(input_controller):
+		var grid_pos = input_controller._get_grid_position_under_mouse()
 		var style = build_preview.get_theme_stylebox("panel") as StyleBoxFlat
 		if style:
 			if network.grid.has(grid_pos):
@@ -148,137 +153,12 @@ func _process(delta: float) -> void:
 			else:
 				style.border_color = Color(0.2, 0.85, 0.4, 0.8) # Green (OK)
 				style.bg_color = Color(0.2, 0.85, 0.4, 0.15)
-				
-	# Update hovered building state
-	var hover_building_id = _get_building_id_under_mouse()
-	for b_id in visuals_map:
-		var visual = visuals_map[b_id]
-		if is_instance_valid(visual):
-			if _is_dragging_building and b_id == _dragged_building_id:
-				visual.is_hovered = false
-			else:
-				visual.is_hovered = (b_id == hover_building_id)
 			
 	# Auto-save
 	save_timer += delta
 	if save_timer >= AUTO_SAVE_INTERVAL:
 		save_timer = 0.0
 		SaveManager.save_game(network, economy)
-		
-	# Redraw for link mode line drawing
-	queue_redraw()
-
-func _draw() -> void:
-	# Draw temporary connection line if linking
-	if current_mode == MouseMode.LINK and link_source_id != 0:
-		var source_vis = visuals_map.get(link_source_id)
-		if is_instance_valid(source_vis):
-			var start_pt = source_vis.global_position
-			var end_pt = get_global_mouse_position()
-			# Draw dashed or colored linking line
-			draw_line(start_pt, end_pt, Color(1.0, 0.9, 0.3, 0.8), 2.0)
-
-func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventMouseButton:
-		var building_id = _get_building_id_under_mouse()
-		var grid_pos = _get_grid_position_under_mouse()
-		if building_id != 0:
-			grid_pos = network.buildings[building_id].grid_position
-		
-		if event.button_index == MOUSE_BUTTON_LEFT:
-			if event.pressed:
-				# Start left click actions
-				_lmb_press_pos = get_global_mouse_position()
-				_has_dragged = false
-				
-				# Drag building: only if we clicked a building and we are in Inspect or Build mode
-				if building_id != 0 and (current_mode == MouseMode.INSPECT or current_mode == MouseMode.BUILD):
-					_is_dragging_building = true
-					_dragged_building_id = building_id
-					_drag_building_start_grid = grid_pos
-				else:
-					# Otherwise, pan camera using LMB
-					camera.is_panning = true
-			else:
-				# Left mouse button released
-				if camera.is_panning:
-					camera.is_panning = false
-					# If we clicked empty space (not dragged camera), trigger actions
-					if not _has_dragged:
-						if current_mode == MouseMode.LINK:
-							if building_id != 0:
-								_handle_link(building_id)
-							else:
-								# Cancel linking on empty space click
-								_set_mouse_mode(MouseMode.INSPECT)
-						elif current_mode == MouseMode.BUILD:
-							if building_id == 0:
-								_handle_build(grid_pos)
-							else:
-								# Clicked a building in build mode -> inspect it
-								_handle_inspect(building_id)
-						elif current_mode == MouseMode.DEMOLISH:
-							_handle_demolish(building_id)
-						else:
-							# Inspect empty space to deselect
-							_handle_inspect(0)
-							
-				elif _is_dragging_building:
-					if _has_dragged:
-						# Drag completed - building is already at its final grid position!
-						# Just force save the state.
-						SaveManager.save_game(network, economy)
-					else:
-						# It was a short click, not a drag: inspect the clicked building
-						if current_mode == MouseMode.DEMOLISH:
-							_handle_demolish(_dragged_building_id)
-						else:
-							_handle_inspect(_dragged_building_id)
-							
-					_is_dragging_building = false
-					_dragged_building_id = 0
-					
-		elif event.button_index == MOUSE_BUTTON_RIGHT:
-			if event.pressed:
-				# RMB on building -> start linking
-				if building_id != 0:
-					_set_mouse_mode(MouseMode.LINK)
-					link_source_id = building_id
-					visuals_map[link_source_id].is_selected = true
-				else:
-					# RMB on empty space -> cancel current non-inspect mode
-					if current_mode != MouseMode.INSPECT:
-						_set_mouse_mode(MouseMode.INSPECT)
-						get_viewport().set_input_as_handled()
-						
-	elif event is InputEventMouseMotion:
-		# Drag threshold checks
-		if _is_dragging_building:
-			if get_global_mouse_position().distance_to(_lmb_press_pos) > 8:
-				_has_dragged = true
-				
-			var hover_grid_pos = _get_grid_position_under_mouse()
-			var b_data = network.buildings.get(_dragged_building_id)
-			if b_data and hover_grid_pos != b_data.grid_position:
-				# Only move if the target grid position is empty
-				if not network.grid.has(hover_grid_pos):
-					# Remove from old grid pos
-					network.grid.erase(b_data.grid_position)
-					# Add to new grid pos
-					network.grid[hover_grid_pos] = _dragged_building_id
-					# Update building data pos
-					b_data.grid_position = hover_grid_pos
-					
-					network.rebuild_caches()
-					
-					# Snap visual position to the grid cell center
-					var visual = visuals_map.get(_dragged_building_id)
-					if is_instance_valid(visual):
-						visual.position = Vector2(hover_grid_pos) * cell_size + Vector2(cell_size / 2.0, cell_size / 2.0)
-					
-		elif camera.is_panning:
-			if get_global_mouse_position().distance_to(_lmb_press_pos) > 8:
-				_has_dragged = true
 
 func _handle_inspect(building_id: int) -> void:
 	# Deselect current
@@ -316,6 +196,8 @@ func _handle_link(building_id: int) -> void:
 		# Set source
 		link_source_id = building_id
 		visuals_map[link_source_id].is_selected = true
+		if is_instance_valid(input_controller):
+			input_controller.link_source_id = link_source_id
 	else:
 		# We clicked the target building
 		if link_source_id != building_id:
@@ -373,23 +255,6 @@ func _create_build_preview() -> void:
 	
 	add_child(build_preview)
 
-func _get_building_id_under_mouse() -> int:
-	var m_pos = get_global_mouse_position()
-	for b_id in visuals_map:
-		var visual = visuals_map[b_id]
-		if is_instance_valid(visual):
-			var rect = Rect2(visual.global_position - Vector2(55, 45), Vector2(110, 90))
-			if rect.has_point(m_pos):
-				return b_id
-	return 0
-
-func _get_grid_position_under_mouse() -> Vector2i:
-	var m_pos = get_global_mouse_position()
-	return Vector2i(
-		floorf(m_pos.x / cell_size),
-		floorf(m_pos.y / cell_size)
-	)
-
 func _set_mouse_mode(mode: MouseMode, build_type: String = "") -> void:
 	# Clean up previous mode state
 	if link_source_id != 0 and visuals_map.has(link_source_id):
@@ -402,6 +267,12 @@ func _set_mouse_mode(mode: MouseMode, build_type: String = "") -> void:
 	# Show/hide build preview
 	build_preview.visible = (current_mode == MouseMode.BUILD)
 	
+	# Sync state with InputController
+	if is_instance_valid(input_controller):
+		input_controller.current_mode = current_mode as int
+		input_controller.selected_build_type = selected_build_type
+		input_controller.link_source_id = link_source_id
+		
 	# Refresh UI
 	_update_ui()
 
@@ -439,6 +310,37 @@ func _on_recipe_selected(idx: int) -> void:
 		network.rebuild_caches()
 		_update_inspector()
 		SaveManager.save_game(network, economy)
+
+# --- Input Controller Handlers ---
+
+func _on_input_building_clicked(building_id: int) -> void:
+	if current_mode == MouseMode.LINK:
+		_handle_link(building_id)
+	elif current_mode == MouseMode.DEMOLISH:
+		_handle_demolish(building_id)
+	else:
+		_handle_inspect(building_id)
+
+func _on_input_building_right_clicked(building_id: int) -> void:
+	_set_mouse_mode(MouseMode.LINK)
+	link_source_id = building_id
+	visuals_map[link_source_id].is_selected = true
+	if is_instance_valid(input_controller):
+		input_controller.link_source_id = link_source_id
+
+func _on_input_empty_space_clicked(grid_pos: Vector2i) -> void:
+	if current_mode == MouseMode.BUILD:
+		_handle_build(grid_pos)
+	else:
+		_handle_inspect(0)
+
+func _on_input_building_move_completed() -> void:
+	SaveManager.save_game(network, economy)
+
+func _on_input_link_mode_cancelled() -> void:
+	_set_mouse_mode(MouseMode.INSPECT)
+
+# --- Offline Catch-up Dialog ---
 
 func _show_offline_catchup_popup(data: Dictionary) -> void:
 	if not is_instance_valid(popup_dialog):
@@ -492,5 +394,8 @@ func _on_reset_pressed() -> void:
 	ticker.tick_completed.connect(_on_simulation_tick)
 	
 	connection_renderer.setup(network, visuals_map)
+	if is_instance_valid(input_controller):
+		input_controller.setup(camera, network, visuals_map, build_preview)
+		
 	_set_mouse_mode(MouseMode.INSPECT)
 	_update_ui()
