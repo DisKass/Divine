@@ -14,9 +14,11 @@ func _init() -> void:
 	verify_upgrades_shop()
 	verify_artifact_altar_and_inventory()
 	verify_artifacts_ui_state()
+	verify_save_system_compatibility()
 	run_performance_benchmark()
 	
 	quit()
+
 
 
 
@@ -450,6 +452,51 @@ func verify_artifacts_ui_state() -> void:
 		print("[PASS] Artifacts UI Panel state, shift queue, and equipment slot management verified successfully!")
 	else:
 		print("[FAIL] Artifacts UI Panel state verification failed.")
+
+func verify_save_system_compatibility() -> void:
+	print("\n--- Verifying Save System Serialization & Backward Compatibility ---")
+	var net = FactoryNetwork.new()
+	var economy = EconomyManager.new()
+	economy.resources["credits"] = 123.4
+	economy.upgrades["miner_speed"] = 3
+	economy.add_artifact_to_inventory("ring_of_wealth", 2)
+	economy.equip_artifact("ring_of_wealth")
+	
+	# Save game
+	var save_ok = SaveManager.save_game(net, economy)
+	print("Save Game -> Success: ", save_ok)
+	
+	# Load game
+	var loaded = SaveManager.load_game()
+	print("Loaded save format version: ", loaded.get("version", 0))
+	
+	var restored_economy = EconomyManager.new()
+	restored_economy.from_dict(loaded.get("economy_dict", {}))
+	
+	var lvl_ok = restored_economy.get_upgrade_level("miner_speed") == 3
+	var eq_ok = restored_economy.equipped_artifacts[0] == "ring_of_wealth"
+	var inv_ok = restored_economy.artifact_inventory.get("ring_of_wealth", 0) == 1
+	var credits_ok = restored_economy.get_resource("credits") == 123.4
+	
+	# Test Legacy save format (version 0 without upgrades/artifacts keys)
+	var legacy_dict = {
+		"resources": { "credits": 50.0 },
+		"building_counts": {},
+		"current_milestone_index": 0
+	}
+	var legacy_economy = EconomyManager.new()
+	legacy_economy.from_dict(legacy_dict)
+	var legacy_safe = (legacy_economy.upgrades.is_empty() and 
+		legacy_economy.artifact_inventory.is_empty() and 
+		legacy_economy.equipped_artifacts == ["", ""] and 
+		legacy_economy.get_resource("credits") == 50.0)
+	print("Legacy Save Fallback Load -> Safe: ", legacy_safe)
+	
+	if save_ok and loaded.get("version", 0) == 1 and lvl_ok and eq_ok and inv_ok and credits_ok and legacy_safe:
+		print("[PASS] Save system versioning, full state serialization, and legacy format migration verified successfully!")
+	else:
+		print("[FAIL] Save system compatibility verification failed.")
+
 
 
 
