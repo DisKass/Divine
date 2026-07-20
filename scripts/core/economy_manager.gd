@@ -28,6 +28,7 @@ var building_counts: Dictionary = {}
 var cost_configs: Dictionary = {}
 
 signal milestone_completed(tier: int, milestone_data: Dictionary)
+signal upgrade_purchased(upgrade_id: String, level: int)
 
 const MILESTONES: Array[Dictionary] = [
 	{
@@ -55,8 +56,37 @@ const MILESTONES: Array[Dictionary] = [
 	}
 ]
 
+const UPGRADE_CONFIGS: Dictionary = {
+	"miner_speed": {
+		"name": "Mining Drill Overclock",
+		"description": "Increases mining speed of all miners (+15% per lvl).",
+		"base_cost": 50.0,
+		"cost_multiplier": 1.5,
+		"max_level": 10,
+		"bonus_per_level": 0.15
+	},
+	"factory_speed": {
+		"name": "Factory Processing Boost",
+		"description": "Increases speed of smelters, crushers, labs & altars (+20% per lvl).",
+		"base_cost": 75.0,
+		"cost_multiplier": 1.6,
+		"max_level": 10,
+		"bonus_per_level": 0.20
+	},
+	"logistics_transfer": {
+		"name": "High-Speed Pipelines",
+		"description": "Increases connection transfer rate between buildings (+50% per lvl).",
+		"base_cost": 100.0,
+		"cost_multiplier": 1.7,
+		"max_level": 10,
+		"bonus_per_level": 0.50
+	}
+}
+
 var current_milestone_index: int = 0
 var milestone_progress: Dictionary = {}
+var upgrades: Dictionary = {}
+
 
 func _init() -> void:
 	# Initialize default resources
@@ -283,13 +313,61 @@ func add_resource(name: String, amount: float) -> void:
 func get_resource(name: String) -> float:
 	return resources.get(name, 0.0)
 
+## Returns the purchased level for an upgrade.
+func get_upgrade_level(id: String) -> int:
+	return int(upgrades.get(id, 0))
+
+## Returns cost dictionary for the next level of an upgrade.
+func get_upgrade_cost(id: String) -> Dictionary:
+	var config = UPGRADE_CONFIGS.get(id, {})
+	if config.is_empty():
+		return {}
+	var lvl = get_upgrade_level(id)
+	var max_lvl = int(config.get("max_level", 10))
+	if lvl >= max_lvl:
+		return {} # Max level reached
+	var base = float(config.get("base_cost", 50.0))
+	var mult = float(config.get("cost_multiplier", 1.5))
+	var cost_val = snappedf(base * pow(mult, lvl), 0.1)
+	return { "credits": cost_val }
+
+## Returns total bonus multiplier fraction for an upgrade (e.g. 0.3 for +30%).
+func get_upgrade_bonus(id: String) -> float:
+	var config = UPGRADE_CONFIGS.get(id, {})
+	if config.is_empty():
+		return 0.0
+	var lvl = get_upgrade_level(id)
+	var per_lvl = float(config.get("bonus_per_level", 0.1))
+	return lvl * per_lvl
+
+## Checks if player can afford the next level of upgrade.
+func can_afford_upgrade(id: String) -> bool:
+	var cost = get_upgrade_cost(id)
+	if cost.is_empty():
+		return false
+	var cost_val = cost.get("credits", 0.0)
+	return get_resource("credits") >= cost_val
+
+## Buys the next level of upgrade if affordable. Returns true if successful.
+func buy_upgrade(id: String) -> bool:
+	if not can_afford_upgrade(id):
+		return false
+	var cost = get_upgrade_cost(id)
+	var cost_val = cost.get("credits", 0.0)
+	resources["credits"] -= cost_val
+	var new_lvl = get_upgrade_level(id) + 1
+	upgrades[id] = new_lvl
+	upgrade_purchased.emit(id, new_lvl)
+	return true
+
 ## Serializes the economy manager.
 func to_dict() -> Dictionary:
 	return {
 		"resources": resources.duplicate(),
 		"building_counts": building_counts.duplicate(),
 		"current_milestone_index": current_milestone_index,
-		"milestone_progress": milestone_progress.duplicate()
+		"milestone_progress": milestone_progress.duplicate(),
+		"upgrades": upgrades.duplicate()
 	}
 
 ## Deserializes and restores the economy manager.
@@ -298,4 +376,6 @@ func from_dict(dict: Dictionary) -> void:
 	building_counts = dict.get("building_counts", {}).duplicate()
 	current_milestone_index = int(dict.get("current_milestone_index", 0))
 	milestone_progress = dict.get("milestone_progress", {}).duplicate()
+	upgrades = dict.get("upgrades", {}).duplicate()
+
 

@@ -12,6 +12,7 @@ const EconomyManager = preload("res://scripts/core/economy_manager.gd")
 var credits_label: Label
 var milestone_label: Label
 var stats_menu: MenuButton
+var shop_panel: ShopPanel
 var tool_buttons: Dictionary = {}
 var tool_cost_labels: Dictionary = {}
 var _scroll_container: ScrollContainer
@@ -90,6 +91,17 @@ func _create_hud() -> void:
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	top_hbox.add_child(spacer)
 	
+	var shop_btn = Button.new()
+	shop_btn.text = "Upgrades Shop 🛒"
+	shop_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	shop_btn.pressed.connect(func():
+		if is_instance_valid(shop_panel):
+			shop_panel.visible = not shop_panel.visible
+			if shop_panel.visible:
+				shop_panel.update_shop()
+	)
+	top_hbox.add_child(shop_btn)
+
 	var reset_btn = Button.new()
 	reset_btn.text = "Reset Game"
 	reset_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -99,6 +111,13 @@ func _create_hud() -> void:
 	var top_margin_r = Control.new()
 	top_margin_r.custom_minimum_size = Vector2(10, 0)
 	top_hbox.add_child(top_margin_r)
+
+	# Setup Shop Panel instance
+	var shop_scene = preload("res://scenes/shop_panel.tscn")
+	shop_panel = shop_scene.instantiate()
+	add_child(shop_panel)
+	shop_panel.visible = false
+
 
 	
 	# Bottom Toolbar Panel
@@ -312,8 +331,15 @@ func _on_building_button_pressed(b_type: String) -> void:
 
 ## Main update call to refresh labels, stats, prices and button disable/enabled states.
 func update_hud(economy: EconomyManager, credits_per_tick: float, current_mode: int, selected_build_type: String) -> void:
+	if is_instance_valid(shop_panel):
+		if shop_panel.economy != economy:
+			shop_panel.setup(economy)
+		if shop_panel.visible:
+			shop_panel.update_shop()
+
 	# 1. Update resource count & milestone status
 	var credits = economy.get_resource("credits")
+
 	credits_label.text = "Credits: $%.1f (+%.1f/s)" % [credits, credits_per_tick]
 	
 	var m_info = economy.get_current_milestone()

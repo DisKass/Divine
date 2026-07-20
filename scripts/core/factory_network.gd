@@ -154,14 +154,26 @@ func rebuild_caches() -> void:
 
 ## Performs a single step of the simulation network (delta in seconds, usually 1.0).
 func tick(delta: float = 1.0, economy: EconomyManager = null) -> void:
+	var miner_speed_mult = 1.0
+	var factory_speed_mult = 1.0
+	var logistics_bonus = 0.0
+	
+	if economy != null:
+		miner_speed_mult += economy.get_upgrade_bonus("miner_speed")
+		factory_speed_mult += economy.get_upgrade_bonus("factory_speed")
+		logistics_bonus = economy.get_upgrade_bonus("logistics_transfer")
+		
 	# 1. Tick all building processes
 	for b in _buildings_list:
-		b.tick(delta)
+		var speed_mult = miner_speed_mult if b.type.begins_with("miner") else factory_speed_mult
+		b.tick(delta, speed_mult)
 		
 	# 2. Distribute resources along connections
-	# Default transfer rate: 5.0 items per tick (adjust as needed)
-	var transfer_rate = 5.0
+	# Default transfer rate: 1.0 item per second base
+	var transfer_rate = 1.0 * (1.0 + logistics_bonus)
 	var max_transfer = transfer_rate * delta
+
+
 	
 	for cache in _connection_cache:
 		var from_b: BuildingData = cache[0]

@@ -4,6 +4,25 @@
 
 ---
 
+## [2026-07-20] 🚀 **`[Коммит]`** Система глобальных улучшений (Global Upgrades Shop Core & UI) и настройка узких мест логистики
+- **Conversation ID**: `2e4d49ee-b203-4576-bec8-83fc541dc415`
+
+### Фактические изменения
+Реализована система постоянных улучшений (ветки Mining Drill Overclock, Factory Processing Boost и High-Speed Pipelines) в `EconomyManager`. Добавлена модальная панель магазина `ShopPanel` и интеграция кнопки "Upgrades Shop 🛒" в `HUD`. Базовая пропускная способность линий выверена на 1.0 ед/сек, создавая ощутимые узкие места при ускорении производства и ценность логистических апгрейдов.
+
+---
+
+
+## [2026-07-20] 📋 **`[План]`** Ticket 4: Global Upgrades Shop Core & UI
+- **Conversation ID**: `2e4d49ee-b203-4576-bec8-83fc541dc415`
+- **Ссылка на план**: [2026-07-20_global_upgrades_shop.md](docs/plans/2026-07-20_global_upgrades_shop.md)
+
+### Описание планируемых изменений
+Реализуется система глобальных улучшений фабрики в `EconomyManager` (ветки Mining Overclock, Factory Efficiency и Logistics Pipeline). В `BuildingData.tick()` и `FactoryNetwork.tick()` внедряется учет купленных апгрейдов для ускорения производства и передачи ресурсов. В верхнее меню HUD добавляется модальная панель Магазина Улучшений (`ShopPanel`).
+
+---
+
+
 ## [2026-07-20] 🚀 **`[Коммит]`** Инспектор Портала и динамическая разблокировка зданий по Tier в UI
 - **Conversation ID**: `2e4d49ee-b203-4576-bec8-83fc541dc415`
 

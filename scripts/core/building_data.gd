@@ -68,13 +68,14 @@ func set_recipe(p_recipe: Dictionary) -> void:
 			output_limits[res] = maxf(r_outputs[res] * 10.0, 20.0)
 
 ## Simulates a single tick of duration `delta` (usually 1.0 second).
-func tick(delta: float = 1.0) -> void:
+func tick(delta: float = 1.0, speed_multiplier: float = 1.0) -> void:
 	if active_recipe.is_empty():
 		return
 		
 	var recipe_inputs = active_recipe.get("inputs", {})
 	var recipe_outputs = active_recipe.get("outputs", {})
 	var duration = float(active_recipe.get("duration", 1.0))
+	var effective_delta = delta * speed_multiplier
 	
 	if not is_producing:
 		# Check if we have enough inputs
@@ -99,7 +100,7 @@ func tick(delta: float = 1.0) -> void:
 			production_progress = 0.0
 			
 	if is_producing:
-		production_progress += delta
+		production_progress += effective_delta
 		if production_progress >= duration - 0.0001: # Avoid floating point issues
 			# Complete production: add products to outputs
 			for res in recipe_outputs:
@@ -107,6 +108,7 @@ func tick(delta: float = 1.0) -> void:
 				outputs[res] = minf(outputs.get(res, 0.0) + recipe_outputs[res], limit)
 			is_producing = false
 			production_progress = 0.0
+
 
 ## Serializes building data state to dictionary.
 func to_dict() -> Dictionary:

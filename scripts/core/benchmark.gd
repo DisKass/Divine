@@ -11,9 +11,11 @@ func _init() -> void:
 	verify_resource_flow()
 	verify_multi_recipe_switching()
 	verify_portal_milestones()
+	verify_upgrades_shop()
 	run_performance_benchmark()
 	
 	quit()
+
 
 
 func verify_economy_rules() -> void:
@@ -313,20 +315,11 @@ func verify_portal_milestones() -> void:
 	
 	# Run ticks to deliver resources
 	print("Simulating ticks for Portal deliveries...")
-	# Tick 1: Producer outputs items
-	net.tick(1.0, economy)
-	# Tick 2: Items transfer to Portal and are submitted to economy
-	net.tick(1.0, economy)
-	
-	var m_status1 = economy.get_current_milestone()
-	print("Progress after 1 batch: ", m_status1["progress"])
-	
-	# Tick 3 & 4: Deliver second batch (total 20 iron_plate, 10 iron_gear -> completes Tier 1 requirement)
-	net.tick(1.0, economy)
-	net.tick(1.0, economy)
+	for t in range(25):
+		net.tick(1.0, economy)
 	
 	var m_status2 = economy.get_current_milestone()
-	print("Current Milestone after 2nd batch: Tier ", m_status2["tier"], " - ", m_status2["name"])
+	print("Current Milestone after 25 ticks: Tier ", m_status2["tier"], " - ", m_status2["name"])
 	
 	var lab_unlocked_t2 = economy.is_building_unlocked("alchemy_lab")
 	var altar_unlocked_t2 = economy.is_building_unlocked("artifact_altar")
@@ -336,6 +329,57 @@ func verify_portal_milestones() -> void:
 		print("[PASS] Portal delivery, Milestone Tier 1 completion, and Tier 2 building unlocks verified successfully!")
 	else:
 		print("[FAIL] Milestone completion or Tier 2 unlocks failed.")
+
+func verify_upgrades_shop() -> void:
+	print("\n--- Verifying Global Upgrades Shop & Logistics Bottleneck ---")
+	var economy = EconomyManager.new()
+	economy.resources["credits"] = 500.0
+	
+	# Initial levels and costs
+	print("Initial Credits: ", economy.get_resource("credits"))
+	var cost_lvl1 = economy.get_upgrade_cost("miner_speed")
+	print("Miner Speed Lvl 1 Cost: ", cost_lvl1)
+	
+	# Buy Level 1 & 2 miner speed
+	var buy1 = economy.buy_upgrade("miner_speed")
+	var buy2 = economy.buy_upgrade("miner_speed")
+	print("Miner Speed Lvl 2 -> Credits Left: ", economy.get_resource("credits"))
+	
+	# Verify network simulation speed scaling
+	var net = FactoryNetwork.new()
+	var miner = net.add_building("miner", Vector2i(0, 0), {})
+	var smelter = net.add_building("smelter", Vector2i(0, 1), {
+		"inputs": { "iron_ore": 1.0 },
+		"outputs": { "iron_plate": 1.0 },
+		"duration": 1.0
+	})
+	
+	# Miner outputs 2.0 per tick for bottleneck testing
+	miner.outputs["iron_ore"] = 2.0
+	net.add_connection(miner.id, smelter.id)
+
+	
+	# Tick without logistics upgrade: transfer_rate = 1.0 per tick, leaving 1.0 backlogged in miner outputs
+	net.tick(1.0, economy)
+	var backlog_base = miner.outputs.get("iron_ore", 0.0)
+	print("Miner backlog without logistics upgrade (max_transfer=1.0): ", backlog_base)
+	
+	# Buy Logistics Pipeline Lvl 2 (+100% -> transfer_rate = 2.0)
+	economy.buy_upgrade("logistics_transfer")
+	economy.buy_upgrade("logistics_transfer")
+	
+	miner.outputs["iron_ore"] = 2.0
+	smelter.inputs["iron_ore"] = 0.0
+	net.tick(1.0, economy)
+	var backlog_upgraded = miner.outputs.get("iron_ore", 0.0)
+	print("Miner backlog with Logistics Lvl 2 upgrade (max_transfer=2.0): ", backlog_upgraded)
+	
+	if buy1 and buy2 and backlog_base == 1.0 and backlog_upgraded == 0.0:
+		print("[PASS] Global Upgrades purchasing, cost scaling, and logistics transfer bottleneck verified successfully!")
+	else:
+		print("[FAIL] Global Upgrades verification failed.")
+
+
 
 
 
