@@ -72,62 +72,87 @@ func _init() -> void:
 	# Set up default cost configs
 	cost_configs = {
 		"portal": {
+			"tier": 1,
 			"multiplier": 1.0,
 			"max_count": 1,
 			"base_costs": { "credits": 50.0 },
 			"first_paid_costs": { "credits": 50.0 }
 		},
 		"miner": {
+			"tier": 1,
 			"multiplier": 1.15,
 			"base_costs": {}, # First miner is free!
 			"first_paid_costs": { "credits": 10.0 }
 		},
 		"miner_iron": {
+			"tier": 1,
 			"multiplier": 1.15,
 			"base_costs": {}, # First iron miner is free
 			"first_paid_costs": { "credits": 15.0 }
 		},
 		"miner_coal": {
+			"tier": 1,
 			"multiplier": 1.15,
 			"base_costs": { "credits": 25.0 },
 			"first_paid_costs": { "credits": 50.0 }
 		},
 		"miner_crystal": {
+			"tier": 2,
 			"multiplier": 1.20,
 			"base_costs": { "credits": 75.0 },
 			"first_paid_costs": { "credits": 150.0 }
 		},
 		"crusher": {
+			"tier": 1,
 			"multiplier": 1.15,
 			"base_costs": { "credits": 35.0 },
 			"first_paid_costs": { "credits": 70.0 }
 		},
 		"smelter": {
+			"tier": 1,
 			"multiplier": 1.18,
 			"base_costs": { "credits": 20.0 },
 			"first_paid_costs": { "credits": 40.0 }
 		},
 		"constructor": {
+			"tier": 1,
 			"multiplier": 1.20,
 			"base_costs": { "credits": 50.0 },
 			"first_paid_costs": { "credits": 100.0 }
 		},
 		"alchemy_lab": {
+			"tier": 2,
 			"multiplier": 1.25,
 			"base_costs": { "credits": 100.0 },
 			"first_paid_costs": { "credits": 200.0 }
 		},
 		"artifact_altar": {
+			"tier": 3,
 			"multiplier": 1.30,
 			"base_costs": { "credits": 250.0 },
 			"first_paid_costs": { "credits": 500.0 }
 		},
 		"seller": {
+			"tier": 1,
 			"multiplier": 1.12,
 			"base_costs": { "credits": 15.0 },
 			"first_paid_costs": { "credits": 30.0 }
 		}
 	}
+
+## Returns player's current unlocked tier index (1-based).
+func get_current_tier() -> int:
+	return current_milestone_index + 1
+
+## Returns the required tier level to unlock a building type.
+func get_building_required_tier(type: String) -> int:
+	var config = cost_configs.get(type, {})
+	return int(config.get("tier", 1))
+
+## Returns whether a building type is unlocked under current milestone tier.
+func is_building_unlocked(type: String) -> bool:
+	var req_tier = get_building_required_tier(type)
+	return get_current_tier() >= req_tier
 
 ## Returns whether building count has reached max allowed count for building type.
 func is_building_limit_reached(type: String) -> bool:
@@ -140,7 +165,7 @@ func is_building_limit_reached(type: String) -> bool:
 
 ## Returns the cost dictionary for the next building of the specified type.
 func get_building_cost(type: String) -> Dictionary:
-	if is_building_limit_reached(type):
+	if not is_building_unlocked(type) or is_building_limit_reached(type):
 		return {}
 		
 	var count = building_counts.get(type, 0)
@@ -164,13 +189,14 @@ func get_building_cost(type: String) -> Dictionary:
 
 ## Checks if the player can afford a building.
 func can_afford(type: String) -> bool:
-	if is_building_limit_reached(type):
+	if not is_building_unlocked(type) or is_building_limit_reached(type):
 		return false
 	var cost = get_building_cost(type)
 	for res in cost:
 		if resources.get(res, 0.0) < cost[res]:
 			return false
 	return true
+
 
 ## Processes the purchase of a building. Returns true if successful.
 func buy_building(type: String) -> bool:

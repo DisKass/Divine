@@ -294,6 +294,16 @@ func verify_portal_milestones() -> void:
 	else:
 		print("[FAIL] Failed to connect to Portal.")
 		
+	# Verify initial Tier 1 building unlocks
+	var miner_iron_unlocked_t1 = economy.is_building_unlocked("miner_iron")
+	var lab_unlocked_t1 = economy.is_building_unlocked("alchemy_lab")
+	var altar_unlocked_t1 = economy.is_building_unlocked("artifact_altar")
+	print("Tier 1 state unlocks -> Miner Iron: ", miner_iron_unlocked_t1, ", Alchemy Lab: ", lab_unlocked_t1, ", Artifact Altar: ", altar_unlocked_t1)
+	if miner_iron_unlocked_t1 and not lab_unlocked_t1 and not altar_unlocked_t1:
+		print("[PASS] Initial Tier 1 building unlocks verified.")
+	else:
+		print("[FAIL] Initial building unlocks check failed.")
+
 	# Listen to milestone signal
 	var milestone_count = [0]
 	economy.milestone_completed.connect(func(tier, data):
@@ -318,10 +328,15 @@ func verify_portal_milestones() -> void:
 	var m_status2 = economy.get_current_milestone()
 	print("Current Milestone after 2nd batch: Tier ", m_status2["tier"], " - ", m_status2["name"])
 	
-	if milestone_count[0] == 1 and int(m_status2.get("tier", 0)) == 2:
-		print("[PASS] Portal delivery and Milestone Tier 1 completion verified successfully!")
+	var lab_unlocked_t2 = economy.is_building_unlocked("alchemy_lab")
+	var altar_unlocked_t2 = economy.is_building_unlocked("artifact_altar")
+	print("Tier 2 state unlocks -> Alchemy Lab: ", lab_unlocked_t2, ", Artifact Altar: ", altar_unlocked_t2)
+
+	if milestone_count[0] == 1 and int(m_status2.get("tier", 0)) == 2 and lab_unlocked_t2 and not altar_unlocked_t2:
+		print("[PASS] Portal delivery, Milestone Tier 1 completion, and Tier 2 building unlocks verified successfully!")
 	else:
-		print("[FAIL] Milestone completion failed. Expected Tier 2, got: ", m_status2)
+		print("[FAIL] Milestone completion or Tier 2 unlocks failed.")
+
 
 
 

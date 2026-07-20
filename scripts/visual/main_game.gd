@@ -299,7 +299,8 @@ func _update_ui() -> void:
 
 func _update_inspector() -> void:
 	var b_data = network.buildings.get(selected_building_id)
-	inspector_panel.update_inspector(b_data)
+	inspector_panel.update_inspector(b_data, economy)
+
 
 func _on_recipe_selected(idx: int) -> void:
 	var b_data = network.buildings.get(selected_building_id)

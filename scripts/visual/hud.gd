@@ -374,16 +374,20 @@ func update_hud(economy: EconomyManager, credits_per_tick: float, current_mode: 
 	if tool_buttons.has(active_btn_name):
 		tool_buttons[active_btn_name].button_pressed = true
 		
-	# 4. Update prices and disable unaffordable / maxed items
+	# 4. Update prices and disable locked / unaffordable / maxed items
 	for b_type in ["portal", "miner_iron", "miner_coal", "miner_crystal", "crusher", "smelter", "constructor", "alchemy_lab", "artifact_altar", "seller"]:
 		if tool_buttons.has(b_type):
 			var btn: Button = tool_buttons[b_type]
+			var is_unlocked = economy.is_building_unlocked(b_type)
+			var req_tier = economy.get_building_required_tier(b_type)
+			var limit_reached = economy.is_building_limit_reached(b_type)
 			var cost = economy.get_building_cost(b_type)
 			var price_lbl = tool_cost_labels.get(b_type)
-			var limit_reached = economy.is_building_limit_reached(b_type)
 			
 			if price_lbl:
-				if limit_reached:
+				if not is_unlocked:
+					price_lbl.text = "Locked (Tier %d)" % req_tier
+				elif limit_reached:
 					price_lbl.text = "Max Built"
 				elif cost.is_empty():
 					price_lbl.text = "Free"
@@ -392,12 +396,16 @@ func update_hud(economy: EconomyManager, credits_per_tick: float, current_mode: 
 					price_lbl.text = "$%.1f" % cost_val
 					
 			var is_selected_type = (current_mode == 1 and selected_build_type == b_type)
-			if (limit_reached or not economy.can_afford(b_type)) and not is_selected_type:
+			if (not is_unlocked or limit_reached or not economy.can_afford(b_type)) and not is_selected_type:
 				btn.disabled = true
 				if price_lbl:
-					price_lbl.add_theme_color_override("font_color", Color(0.9, 0.3, 0.3))
+					if not is_unlocked:
+						price_lbl.add_theme_color_override("font_color", Color(0.6, 0.6, 0.7))
+					else:
+						price_lbl.add_theme_color_override("font_color", Color(0.9, 0.3, 0.3))
 			else:
 				btn.disabled = false
 				if price_lbl:
 					price_lbl.add_theme_color_override("font_color", Color(1.0, 0.9, 0.3))
+
 
