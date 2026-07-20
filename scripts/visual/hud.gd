@@ -13,7 +13,9 @@ var credits_label: Label
 var milestone_label: Label
 var stats_menu: MenuButton
 var shop_panel: ShopPanel
+var artifacts_panel: ArtifactsPanel
 var tool_buttons: Dictionary = {}
+
 var tool_cost_labels: Dictionary = {}
 var _scroll_container: ScrollContainer
 
@@ -102,6 +104,17 @@ func _create_hud() -> void:
 	)
 	top_hbox.add_child(shop_btn)
 
+	var artifacts_btn = Button.new()
+	artifacts_btn.text = "Artifacts 💍"
+	artifacts_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	artifacts_btn.pressed.connect(func():
+		if is_instance_valid(artifacts_panel):
+			artifacts_panel.visible = not artifacts_panel.visible
+			if artifacts_panel.visible:
+				artifacts_panel.update_panel()
+	)
+	top_hbox.add_child(artifacts_btn)
+
 	var reset_btn = Button.new()
 	reset_btn.text = "Reset Game"
 	reset_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -112,11 +125,17 @@ func _create_hud() -> void:
 	top_margin_r.custom_minimum_size = Vector2(10, 0)
 	top_hbox.add_child(top_margin_r)
 
-	# Setup Shop Panel instance
+	# Setup Panels instances
 	var shop_scene = preload("res://scenes/shop_panel.tscn")
 	shop_panel = shop_scene.instantiate()
 	add_child(shop_panel)
 	shop_panel.visible = false
+
+	var art_scene = preload("res://scenes/artifacts_panel.tscn")
+	artifacts_panel = art_scene.instantiate()
+	add_child(artifacts_panel)
+	artifacts_panel.visible = false
+
 
 
 	
@@ -337,8 +356,13 @@ func update_hud(economy: EconomyManager, credits_per_tick: float, current_mode: 
 		if shop_panel.visible:
 			shop_panel.update_shop()
 
+	if is_instance_valid(artifacts_panel) and artifacts_panel.economy != economy:
+		artifacts_panel.setup(economy)
+
 	# 1. Update resource count & milestone status
 	var credits = economy.get_resource("credits")
+
+
 
 	credits_label.text = "Credits: $%.1f (+%.1f/s)" % [credits, credits_per_tick]
 	

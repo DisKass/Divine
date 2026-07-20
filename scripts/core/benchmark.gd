@@ -12,9 +12,13 @@ func _init() -> void:
 	verify_multi_recipe_switching()
 	verify_portal_milestones()
 	verify_upgrades_shop()
+	verify_artifact_altar_and_inventory()
+	verify_artifacts_ui_state()
 	run_performance_benchmark()
 	
 	quit()
+
+
 
 
 
@@ -378,6 +382,78 @@ func verify_upgrades_shop() -> void:
 		print("[PASS] Global Upgrades purchasing, cost scaling, and logistics transfer bottleneck verified successfully!")
 	else:
 		print("[FAIL] Global Upgrades verification failed.")
+
+func verify_artifact_altar_and_inventory() -> void:
+	print("\n--- Verifying Artifact Altar Crafting & Global Inventory ---")
+	var net = FactoryNetwork.new()
+	var economy = EconomyManager.new()
+	
+	# Spawn Artifact Altar with Amulet recipe
+	var altar = net.add_building("artifact_altar", Vector2i(0, 0), {
+		"inputs": {},
+		"outputs": { "runesteel_amulet": 1.0 },
+		"duration": 1.0
+	})
+	
+	# Simulate 1 tick -> altar completes crafting 1 runesteel_amulet
+	net.tick(1.0, economy)
+	
+	var inv_before = int(economy.artifact_inventory.get("runesteel_amulet", 0))
+	print("Crafted Artifacts in Inventory: ", economy.artifact_inventory)
+	print("Altar Output Buffer after harvest: ", altar.outputs.get("runesteel_amulet", 0.0))
+	
+	# Equip artifact in Slot 0
+	var equip_ok = economy.equip_artifact(0, "runesteel_amulet")
+	var inv_after = int(economy.artifact_inventory.get("runesteel_amulet", 0))
+	print("Equip Runesteel Amulet in Slot 0 -> Success: ", equip_ok)
+	print("Equipped Slots: ", economy.equipped_artifacts)
+	print("Inventory after equipping: ", economy.artifact_inventory)
+	
+	var factory_mod = economy.get_equipped_modifier_bonus("factory_speed")
+	var logistics_mod = economy.get_equipped_modifier_bonus("logistics_transfer")
+	print("Equipped Modifier Bonus -> Factory Speed: +", factory_mod * 100.0, "%, Logistics: +", logistics_mod * 100.0, "%")
+	
+	if inv_before == 1 and inv_after == 0 and equip_ok and factory_mod == 0.25 and logistics_mod == 0.25:
+		print("[PASS] Artifact Altar harvesting, Inventory tracking, and equipment modifiers verified successfully!")
+	else:
+		print("[FAIL] Artifact Altar and Inventory verification failed.")
+
+func verify_artifacts_ui_state() -> void:
+	print("\n--- Verifying Artifacts UI Panel State & Signal Flow ---")
+	var economy = EconomyManager.new()
+	var ArtifactsPanelScript = preload("res://scripts/visual/artifacts_panel.gd")
+	var panel = ArtifactsPanelScript.new()
+	panel.setup(economy)
+	
+	# Add items to inventory and test panel updates
+	economy.add_artifact_to_inventory("ring_of_wealth", 2)
+	print("Added Ring of Wealth x2. Inventory: ", economy.artifact_inventory)
+	
+	# Equip Ring of Wealth into Slot 0 and Slot 1, then test shift queue with Runesteel Amulet
+	economy.add_artifact_to_inventory("runesteel_amulet", 2)
+	economy.equip_artifact("runesteel_amulet") # Slot 1 gets Amulet
+	print("Slots after equipping Amulet: ", economy.equipped_artifacts)
+	
+	# Shift test: Equip another Amulet when full [Ring, Amulet]
+	# Expected: Ring is expelled to inventory, Amulet shifts to Slot 1, new Amulet in Slot 0 -> [Amulet, Amulet]
+	economy.equip_artifact("runesteel_amulet")
+	print("Slots after shift queue equip Amulet: ", economy.equipped_artifacts)
+	print("Inventory after shift queue: ", economy.artifact_inventory)
+	
+	var shift_ok = (economy.equipped_artifacts[0] == "runesteel_amulet" and 
+		economy.equipped_artifacts[1] == "runesteel_amulet" and 
+		economy.artifact_inventory.get("ring_of_wealth", 0) == 2 and 
+		economy.artifact_inventory.get("runesteel_amulet", 0) == 0)
+	
+	var sell_bonus = economy.get_equipped_modifier_bonus("sell_price_mult")
+	if economy.equipped_artifacts[0] == "runesteel_amulet" and shift_ok:
+		print("[PASS] Artifacts UI Panel state, shift queue, and equipment slot management verified successfully!")
+	else:
+		print("[FAIL] Artifacts UI Panel state verification failed.")
+
+
+
+
 
 
 

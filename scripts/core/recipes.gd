@@ -126,8 +126,23 @@ const DATA: Dictionary = {
 			"inputs": { "runesteel_ingot": 2.0, "mana_essence": 1.0 },
 			"outputs": { "runesteel_amulet": 1.0 },
 			"duration": 5.0
+		},
+		{
+			"id": "ring_of_wealth",
+			"name": "Forge Ring of Wealth",
+			"inputs": { "runesteel_ingot": 2.0, "crystal_dust": 2.0 },
+			"outputs": { "ring_of_wealth": 1.0 },
+			"duration": 4.0
+		},
+		{
+			"id": "philosophers_stone",
+			"name": "Transmute Philosopher's Stone",
+			"inputs": { "runesteel_ingot": 4.0, "mana_essence": 4.0 },
+			"outputs": { "philosophers_stone": 1.0 },
+			"duration": 8.0
 		}
 	],
+
 	"seller": [
 		{
 			"id": "sell_gear",

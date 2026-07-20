@@ -29,8 +29,38 @@ var cost_configs: Dictionary = {}
 
 signal milestone_completed(tier: int, milestone_data: Dictionary)
 signal upgrade_purchased(upgrade_id: String, level: int)
+signal artifact_crafted(artifact_id: String, new_count: int)
+signal artifact_equipped(slot_idx: int, artifact_id: String)
+signal artifact_unequipped(slot_idx: int, artifact_id: String)
+
+const ARTIFACT_CONFIGS: Dictionary = {
+	"runesteel_amulet": {
+		"name": "Runesteel Amulet",
+		"description": "+25% Factory Speed & +25% Logistics",
+		"modifiers": {
+			"factory_speed": 0.25,
+			"logistics_transfer": 0.25
+		}
+	},
+	"ring_of_wealth": {
+		"name": "Ring of Wealth",
+		"description": "+50% Selling Credit Income",
+		"modifiers": {
+			"sell_price_mult": 0.50
+		}
+	},
+	"philosophers_stone": {
+		"name": "Philosopher's Stone",
+		"description": "+50% Mining Speed & +50% Factory Speed",
+		"modifiers": {
+			"miner_speed": 0.50,
+			"factory_speed": 0.50
+		}
+	}
+}
 
 const MILESTONES: Array[Dictionary] = [
+
 	{
 		"tier": 1,
 		"name": "Industrial Foundation",
@@ -86,6 +116,9 @@ const UPGRADE_CONFIGS: Dictionary = {
 var current_milestone_index: int = 0
 var milestone_progress: Dictionary = {}
 var upgrades: Dictionary = {}
+var artifact_inventory: Dictionary = {}
+var equipped_artifacts: Array[String] = ["", ""]
+
 
 
 func _init() -> void:
@@ -360,6 +393,88 @@ func buy_upgrade(id: String) -> bool:
 	upgrade_purchased.emit(id, new_lvl)
 	return true
 
+## Adds crafted artifact to global inventory.
+func add_artifact_to_inventory(artifact_id: String, amount: int = 1) -> void:
+	if amount <= 0:
+		return
+	var current = int(artifact_inventory.get(artifact_id, 0))
+	var new_count = current + amount
+	artifact_inventory[artifact_id] = new_count
+	artifact_crafted.emit(artifact_id, new_count)
+
+## Equips an artifact using shift/push queue logic.
+## If free slot exists, inserts into first free slot.
+## If all slots full, expels last slot item to inventory, shifts slots right, and inserts new item at Slot 0.
+func equip_artifact(arg1: Variant, arg2: Variant = null) -> bool:
+	var artifact_id: String = ""
+	var requested_slot: int = -1
+	
+	if arg1 is int and arg2 is String:
+		requested_slot = int(arg1)
+		artifact_id = String(arg2)
+	elif arg1 is String:
+		artifact_id = String(arg1)
+		if arg2 is int:
+			requested_slot = int(arg2)
+			
+	if not ARTIFACT_CONFIGS.has(artifact_id):
+		return false
+	var count = int(artifact_inventory.get(artifact_id, 0))
+	if count <= 0:
+		return false
+		
+	# Find first free slot
+	var free_idx = -1
+	for i in range(equipped_artifacts.size()):
+		if equipped_artifacts[i] == "":
+			free_idx = i
+			break
+			
+	if free_idx != -1:
+		# Put in first free slot
+		artifact_inventory[artifact_id] = count - 1
+		equipped_artifacts[free_idx] = artifact_id
+		artifact_equipped.emit(free_idx, artifact_id)
+		return true
+		
+	# All slots full: expel last slot to inventory and shift right
+	var last_idx = equipped_artifacts.size() - 1
+	var expelled_id = equipped_artifacts[last_idx]
+	if expelled_id != "":
+		artifact_inventory[expelled_id] = int(artifact_inventory.get(expelled_id, 0)) + 1
+		artifact_unequipped.emit(last_idx, expelled_id)
+		
+	for i in range(last_idx, 0, -1):
+		equipped_artifacts[i] = equipped_artifacts[i - 1]
+		if equipped_artifacts[i] != "":
+			artifact_equipped.emit(i, equipped_artifacts[i])
+			
+	artifact_inventory[artifact_id] = int(artifact_inventory.get(artifact_id, 0)) - 1
+	equipped_artifacts[0] = artifact_id
+	artifact_equipped.emit(0, artifact_id)
+	return true
+
+
+## Unequips an artifact from slot_idx back into inventory.
+func unequip_artifact(slot_idx: int) -> void:
+	if slot_idx < 0 or slot_idx >= equipped_artifacts.size():
+		return
+	var current_id = equipped_artifacts[slot_idx]
+	if current_id == "":
+		return
+	equipped_artifacts[slot_idx] = ""
+	artifact_inventory[current_id] = int(artifact_inventory.get(current_id, 0)) + 1
+	artifact_unequipped.emit(slot_idx, current_id)
+
+## Returns total sum of bonus for a modifier_name from all currently equipped artifacts.
+func get_equipped_modifier_bonus(modifier_name: String) -> float:
+	var total_bonus = 0.0
+	for art_id in equipped_artifacts:
+		if art_id != "" and ARTIFACT_CONFIGS.has(art_id):
+			var mods: Dictionary = ARTIFACT_CONFIGS[art_id].get("modifiers", {})
+			total_bonus += float(mods.get(modifier_name, 0.0))
+	return total_bonus
+
 ## Serializes the economy manager.
 func to_dict() -> Dictionary:
 	return {
@@ -367,7 +482,9 @@ func to_dict() -> Dictionary:
 		"building_counts": building_counts.duplicate(),
 		"current_milestone_index": current_milestone_index,
 		"milestone_progress": milestone_progress.duplicate(),
-		"upgrades": upgrades.duplicate()
+		"upgrades": upgrades.duplicate(),
+		"artifact_inventory": artifact_inventory.duplicate(),
+		"equipped_artifacts": equipped_artifacts.duplicate()
 	}
 
 ## Deserializes and restores the economy manager.
@@ -377,5 +494,12 @@ func from_dict(dict: Dictionary) -> void:
 	current_milestone_index = int(dict.get("current_milestone_index", 0))
 	milestone_progress = dict.get("milestone_progress", {}).duplicate()
 	upgrades = dict.get("upgrades", {}).duplicate()
+	artifact_inventory = dict.get("artifact_inventory", {}).duplicate()
+	
+	var saved_eq = dict.get("equipped_artifacts", ["", ""])
+	equipped_artifacts = ["", ""]
+	for i in range(min(saved_eq.size(), 2)):
+		equipped_artifacts[i] = String(saved_eq[i])
+
 
 
