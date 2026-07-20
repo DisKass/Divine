@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="MilestoneData" format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/milestone_data.gd" id="1_57gb1"]
+
+[resource]
+script = ExtResource("1_57gb1")
+tier = 2
+name = "Alchemical Synthesis"
+requirements = {
+"iron_ingot": 30.0,
+"mana_essence": 15.0
+}

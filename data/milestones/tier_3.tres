@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="MilestoneData" format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/milestone_data.gd" id="1_1sks4"]
+
+[resource]
+script = ExtResource("1_1sks4")
+tier = 3
+name = "Artifact Mastery"
+requirements = {
+"runesteel_ingot": 10.0
+}

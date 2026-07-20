@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="ArtifactData" format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/artifact_data.gd" id="1_tctj8"]
+
+[resource]
+script = ExtResource("1_tctj8")
+id = "ring_of_wealth"
+name = "Ring of Wealth"
+description = "+50% Selling Credit Income"
+modifiers = {
+"sell_price_mult": 0.5
+}

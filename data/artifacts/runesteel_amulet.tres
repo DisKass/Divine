@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="ArtifactData" format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/artifact_data.gd" id="1_51yf0"]
+
+[resource]
+script = ExtResource("1_51yf0")
+id = "runesteel_amulet"
+name = "Runesteel Amulet"
+description = "+25% Factory Speed & +25% Logistics"
+modifiers = {
+"factory_speed": 0.25,
+"logistics_transfer": 0.25
+}

@@ -1,6 +1,102 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=3 format=3 uid="uid://cx6g3s33w84f3"]
 
 [ext_resource type="Script" path="res://scripts/visual/hud.gd" id="1_hud"]
 
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_top"]
+bg_color = Color(0.06, 0.08, 0.1, 0.85)
+border_width_bottom = 2
+border_color = Color(0.3, 0.6, 1, 0.5)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_bottom"]
+bg_color = Color(0.06, 0.08, 0.1, 0.85)
+border_width_top = 2
+border_color = Color(0.3, 0.6, 1, 0.5)
+
 [node name="HUD" type="CanvasLayer"]
 script = ExtResource("1_hud")
+
+[node name="TopPanel" type="PanelContainer" parent="."]
+custom_minimum_size = Vector2(0, 50)
+anchors_preset = 10
+anchor_right = 1.0
+grow_horizontal = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_top")
+
+[node name="HBoxContainer" type="HBoxContainer" parent="TopPanel"]
+layout_mode = 2
+theme_override_constants/separation = 20
+
+[node name="Margin1" type="Control" parent="TopPanel/HBoxContainer"]
+custom_minimum_size = Vector2(10, 0)
+layout_mode = 2
+
+[node name="CreditsLabel" type="Label" parent="TopPanel/HBoxContainer"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.9, 0.3, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 4
+theme_override_font_sizes/font_size = 16
+text = "Credits: $0.0"
+vertical_alignment = 1
+
+[node name="MilestoneLabel" type="Label" parent="TopPanel/HBoxContainer"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.95, 0.7, 0.3, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 3
+theme_override_font_sizes/font_size = 13
+text = "Milestone: Tier 1 - Loading..."
+vertical_alignment = 1
+
+[node name="StatsMenu" type="MenuButton" parent="TopPanel/HBoxContainer"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.7, 0.8, 0.9, 1)
+theme_override_colors/font_hover_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 13
+text = "Buildings (0) ▾"
+
+[node name="Spacer" type="Control" parent="TopPanel/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="ShopBtn" type="Button" parent="TopPanel/HBoxContainer"]
+layout_mode = 2
+text = "Upgrades Shop 🛒"
+
+[node name="ArtifactsBtn" type="Button" parent="TopPanel/HBoxContainer"]
+layout_mode = 2
+text = "Artifacts 💍"
+
+[node name="ResetBtn" type="Button" parent="TopPanel/HBoxContainer"]
+layout_mode = 2
+text = "Reset Game"
+
+[node name="Margin2" type="Control" parent="TopPanel/HBoxContainer"]
+custom_minimum_size = Vector2(10, 0)
+layout_mode = 2
+
+[node name="BottomPanel" type="PanelContainer" parent="."]
+custom_minimum_size = Vector2(0, 150)
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 0
+theme_override_styles/panel = SubResource("StyleBoxFlat_bottom")
+
+[node name="MarginContainer" type="MarginContainer" parent="BottomPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 10
+
+[node name="ScrollContainer" type="ScrollContainer" parent="BottomPanel/MarginContainer"]
+layout_mode = 2
+horizontal_scroll_mode = 3
+vertical_scroll_mode = 0
+
+[node name="BuildToolsHBox" type="HBoxContainer" parent="BottomPanel/MarginContainer/ScrollContainer"]
+layout_mode = 2
+theme_override_constants/separation = 12

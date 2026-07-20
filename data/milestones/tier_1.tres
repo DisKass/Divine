@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="MilestoneData" format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/milestone_data.gd" id="1_lkgii"]
+
+[resource]
+script = ExtResource("1_lkgii")
+name = "Industrial Foundation"
+requirements = {
+"iron_gear": 10.0,
+"iron_plate": 20.0
+}

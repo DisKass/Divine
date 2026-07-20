@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="BuildingCostData" format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/building_cost_data.gd" id="1_tysne"]
+
+[resource]
+script = ExtResource("1_tysne")
+multiplier = 1.18
+base_costs = {
+"credits": 20.0
+}
+first_paid_costs = {
+"credits": 40.0
+}

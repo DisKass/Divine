@@ -157,17 +157,17 @@ func rebuild_caches() -> void:
 				_connection_cache.append([from_b, to_b, shared_resources])
 
 ## Performs a single step of the simulation network (delta in seconds, usually 1.0).
-func tick(delta: float = 1.0, economy: EconomyManager = null) -> void:
+func tick(delta: float = 1.0, resource_mgr: ResourceManager = null, modifier_mgr: ModifierManager = null, milestones_mgr: MilestonesManager = null, artifacts_mgr: ArtifactsManager = null) -> void:
 	var miner_speed_mult = 1.0
 	var factory_speed_mult = 1.0
 	var logistics_bonus = 0.0
 	var sell_mult = 1.0
 	
-	if economy != null:
-		miner_speed_mult += economy.get_upgrade_bonus("miner_speed") + economy.get_equipped_modifier_bonus("miner_speed")
-		factory_speed_mult += economy.get_upgrade_bonus("factory_speed") + economy.get_equipped_modifier_bonus("factory_speed")
-		logistics_bonus = economy.get_upgrade_bonus("logistics_transfer") + economy.get_equipped_modifier_bonus("logistics_transfer")
-		sell_mult += economy.get_equipped_modifier_bonus("sell_price_mult")
+	if modifier_mgr != null:
+		miner_speed_mult += modifier_mgr.get_bonus("miner_speed")
+		factory_speed_mult += modifier_mgr.get_bonus("factory_speed")
+		logistics_bonus = modifier_mgr.get_bonus("logistics_transfer")
+		sell_mult += modifier_mgr.get_bonus("sell_price_mult")
 		
 	# 1. Tick all building processes
 	for b in _buildings_list:
@@ -203,29 +203,29 @@ func tick(delta: float = 1.0, economy: EconomyManager = null) -> void:
 			to_b.inputs[res] += amount
 			
 	# 3. Harvest global credits from outputs, process Portal deliveries & collect crafted Artifacts
-	if economy != null:
+	if resource_mgr != null:
 		for b in _credits_producers:
 			var amt = b.outputs.get("credits", 0.0)
 			if amt > 0.0:
-				economy.add_resource("credits", amt * sell_mult)
+				resource_mgr.add_resource("credits", amt * sell_mult)
 				b.outputs["credits"] = 0.0
 				
+	if milestones_mgr != null:
 		for p in _portals:
 			for res in p.inputs.keys():
 				var amt = float(p.inputs[res])
 				if amt > 0.0:
-					economy.submit_portal_resource(res, amt)
+					milestones_mgr.submit_portal_resource(res, amt)
 					p.inputs[res] = 0.0
 
+	if artifacts_mgr != null:
 		for altar in _altars:
 			for res_name in altar.outputs.keys():
-				if economy.ARTIFACT_CONFIGS.has(res_name):
+				if artifacts_mgr.artifact_configs.has(res_name):
 					var amt = int(altar.outputs[res_name])
 					if amt > 0:
-						economy.add_artifact_to_inventory(res_name, amt)
+						artifacts_mgr.add_artifact_to_inventory(res_name, amt)
 						altar.outputs[res_name] = 0.0
-
-
 
 ## Serializes the entire network.
 func to_dict() -> Dictionary:

@@ -3,7 +3,7 @@ class_name MainGame
 
 ## Main Game Controller. Coordinates simulation, UI, mouse modes, and save management.
 
-const Recipes = preload("res://scripts/core/recipes.gd")
+
 
 enum MouseMode { INSPECT, BUILD, LINK, DEMOLISH }
 
@@ -18,7 +18,12 @@ var link_source_id: int = 0
 
 # Core Managers
 var network: FactoryNetwork
-var economy: EconomyManager
+var resource_manager: ResourceManager
+var modifier_manager: ModifierManager
+var milestones_manager: MilestonesManager
+var artifacts_manager: ArtifactsManager
+var building_manager: BuildingManager
+var upgrades_manager: UpgradesManager
 var ticker: SimulationTicker
 
 # Visual maps: building_id -> BuildingVisual
@@ -102,19 +107,34 @@ func _ready() -> void:
 
 func _initialize_game() -> void:
 	var save_data = SaveManager.load_game()
+	
+	resource_manager = ResourceManager.new()
+	modifier_manager = ModifierManager.new()
+	milestones_manager = MilestonesManager.new()
+	artifacts_manager = ArtifactsManager.new(modifier_manager)
+	building_manager = BuildingManager.new(resource_manager, milestones_manager)
+	upgrades_manager = UpgradesManager.new(resource_manager, modifier_manager)
+	
 	if not save_data.is_empty():
 		var net_dict = save_data["network_dict"]
-		var eco_dict = save_data["economy_dict"]
 		var saved_time = save_data["timestamp"]
 		
 		network = FactoryNetwork.from_dict(net_dict)
-		economy = EconomyManager.new()
-		economy.from_dict(eco_dict)
+		
+		# For old saves, they might come from economy_dict fallback
+		# The new load_game() provides them mapped.
+		resource_manager.from_dict(save_data.get("resource_manager_dict", {}))
+		building_manager.from_dict(save_data.get("building_manager_dict", {}))
+		upgrades_manager.from_dict(save_data.get("upgrades_manager_dict", {}))
+		artifacts_manager.from_dict(save_data.get("artifacts_manager_dict", {}))
+		milestones_manager.from_dict(save_data.get("milestones_manager_dict", {}))
+		
 		# Migrate old starting credits (50$) to new 85$ for fresh profiles
 		var total_buildings = net_dict.get("buildings", []).size()
-		if total_buildings == 0 and economy.get_resource("credits") < 85.0:
-			economy.resources["credits"] = 85.0
-		ticker = SimulationTicker.new(network, economy)
+		if total_buildings == 0 and resource_manager.get_resource("credits") < 85.0:
+			resource_manager.add_resource("credits", 85.0 - resource_manager.get_resource("credits"))
+			
+		ticker = SimulationTicker.new(network, resource_manager, modifier_manager, milestones_manager, artifacts_manager)
 		
 		# Instantiate visual nodes for all loaded buildings
 		for b_id in network.buildings:
@@ -128,8 +148,7 @@ func _initialize_game() -> void:
 	else:
 		# Initial state
 		network = FactoryNetwork.new()
-		economy = EconomyManager.new()
-		ticker = SimulationTicker.new(network, economy)
+		ticker = SimulationTicker.new(network, resource_manager, modifier_manager, milestones_manager, artifacts_manager)
 		
 	connection_renderer.setup(network, visuals_map)
 	if is_instance_valid(input_controller):
@@ -147,7 +166,7 @@ func _process(delta: float) -> void:
 			if network.grid.has(grid_pos):
 				style.border_color = Color(0.9, 0.25, 0.25, 0.8) # Red (blocked)
 				style.bg_color = Color(0.9, 0.25, 0.25, 0.15)
-			elif not economy.can_afford(selected_build_type):
+			elif not building_manager.can_afford(selected_build_type):
 				style.border_color = Color(0.9, 0.6, 0.1, 0.8) # Orange (unaffordable)
 				style.bg_color = Color(0.9, 0.6, 0.1, 0.1)
 			else:
@@ -158,7 +177,7 @@ func _process(delta: float) -> void:
 	save_timer += delta
 	if save_timer >= AUTO_SAVE_INTERVAL:
 		save_timer = 0.0
-		SaveManager.save_game(network, economy)
+		SaveManager.save_game(network, resource_manager, building_manager, upgrades_manager, artifacts_manager, milestones_manager)
 
 func _handle_inspect(building_id: int) -> void:
 	# Deselect current
@@ -177,11 +196,11 @@ func _handle_build(grid_pos: Vector2i) -> void:
 	if network.grid.has(grid_pos):
 		return # Blocked
 		
-	if not economy.can_afford(selected_build_type):
+	if not building_manager.can_afford(selected_build_type):
 		return # Cannot afford
 		
 	# Process purchase
-	if economy.buy_building(selected_build_type):
+	if building_manager.buy_building(selected_build_type):
 		var default_rec = default_recipes.get(selected_build_type, {})
 		var recipe = default_rec.duplicate(true) if not default_rec.is_empty() else {}
 		var b_data = network.add_building(selected_build_type, grid_pos, recipe)
@@ -213,7 +232,7 @@ func _handle_demolish(building_id: int) -> void:
 	var building = network.buildings.get(building_id)
 	if building:
 		# Refund
-		economy.refund_building(building.type)
+		building_manager.refund_building(building.type)
 		
 		# Remove from visual system
 		if visuals_map.has(building_id):
@@ -295,11 +314,18 @@ func _update_ui() -> void:
 			var amt = b.active_recipe.get("outputs", {}).get("credits", 0.0)
 			credits_per_tick += amt / dur
 			
-	hud.update_hud(economy, credits_per_tick, current_mode as int, selected_build_type)
+	# Will refactor HUD soon, pass the managers for now
+	if hud.has_method("update_hud_new"):
+		hud.update_hud_new(resource_manager, building_manager, upgrades_manager, artifacts_manager, milestones_manager, credits_per_tick, current_mode as int, selected_build_type)
+	else:
+		pass # Ignore old HUD method until refactored
 
 func _update_inspector() -> void:
 	var b_data = network.buildings.get(selected_building_id)
-	inspector_panel.update_inspector(b_data, economy)
+	if inspector_panel.has_method("update_inspector_new"):
+		inspector_panel.update_inspector_new(b_data, building_manager)
+	else:
+		pass # Ignore old inspector panel method until refactored
 
 
 func _on_recipe_selected(idx: int) -> void:
@@ -312,7 +338,7 @@ func _on_recipe_selected(idx: int) -> void:
 		b_data.set_recipe(new_recipe)
 		network.rebuild_caches()
 		_update_inspector()
-		SaveManager.save_game(network, economy)
+		SaveManager.save_game(network, resource_manager, building_manager, upgrades_manager, artifacts_manager, milestones_manager)
 
 # --- Input Controller Handlers ---
 
@@ -338,7 +364,7 @@ func _on_input_empty_space_clicked(grid_pos: Vector2i) -> void:
 		_handle_inspect(0)
 
 func _on_input_building_move_completed() -> void:
-	SaveManager.save_game(network, economy)
+	SaveManager.save_game(network, resource_manager, building_manager, upgrades_manager, artifacts_manager, milestones_manager)
 
 func _on_input_link_mode_cancelled() -> void:
 	_set_mouse_mode(MouseMode.INSPECT)
@@ -388,12 +414,18 @@ func _on_reset_pressed() -> void:
 		visual.queue_free()
 	visuals_map.clear()
 	selected_building_id = 0
-	inspector_panel.update_inspector(null)
+	if inspector_panel.has_method("update_inspector_new"):
+		inspector_panel.update_inspector_new(null, null)
 	
 	# Re-init core
 	network = FactoryNetwork.new()
-	economy = EconomyManager.new()
-	ticker = SimulationTicker.new(network, economy)
+	resource_manager = ResourceManager.new()
+	modifier_manager = ModifierManager.new()
+	milestones_manager = MilestonesManager.new()
+	artifacts_manager = ArtifactsManager.new(modifier_manager)
+	building_manager = BuildingManager.new(resource_manager, milestones_manager)
+	upgrades_manager = UpgradesManager.new(resource_manager, modifier_manager)
+	ticker = SimulationTicker.new(network, resource_manager, modifier_manager, milestones_manager, artifacts_manager)
 	ticker.tick_completed.connect(_on_simulation_tick)
 	
 	connection_renderer.setup(network, visuals_map)

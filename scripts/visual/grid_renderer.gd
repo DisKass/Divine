@@ -21,6 +21,7 @@ func _process(_delta: float) -> void:
 		_last_transform = current_transform
 		queue_redraw()
 
+@warning_ignore("integer_division")
 func _draw() -> void:
 	var canvas_transform = get_viewport().canvas_transform
 	var screen_transform = canvas_transform.inverse()

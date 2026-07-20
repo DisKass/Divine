@@ -4,6 +4,23 @@
 
 ---
 
+## [2026-07-20] 🚀 **`[Коммит]`** Refactoring #2: Architecture, UI, and Performance
+- **Conversation ID**: `652f16d4-80bb-4cb1-b69a-8621881d106a`
+
+### Фактические изменения
+Проведен масштабный рефакторинг `EconomyManager` — он разделен на независимые классы (`ResourceManager`, `BuildingManager`, `ArtifactsManager`, `UpgradesManager`, `MilestonesManager`). Заменена процедурная генерация интерфейса на сцены `.tscn` (созданы `hud.tscn`, `inspector_panel.tscn`, `shop_panel.tscn`, `artifacts_panel.tscn`). Монолитный файл тестов `benchmark.gd` разбит на изолированные наборы тестов. Хардкод параметров строений вынесен в `.tres` ресурсы. Внесены исправления в парсинг ресурсов и интерфейсы для совместимости с Godot 4.
+
+---
+
+## [2026-07-20] 📋 **`[План]`** Refactoring #2: Architecture, UI, and Performance
+- **Conversation ID**: `652f16d4-80bb-4cb1-b69a-8621881d106a`
+- **Ссылка на план**: [2026-07-20_refactoring_2.md](docs/plans/2026-07-20_refactoring_2.md)
+
+### Описание планируемых изменений
+План включает масштабный рефакторинг `EconomyManager` с разделением его на узкоспециализированные классы (`ResourceManager`, `BuildingManager`, `ModifierManager` и др.). Устаревший подход создания UI через скрипты будет заменен на декларативные сцены `.tscn`. Хардкод будет вынесен в `.tres` файлы ресурсов. Монолитный скрипт тестирования `benchmark.gd` будет разбит на несколько тестовых файлов. Также будет проведена оптимизация производительности в `main_game.gd`.
+
+---
+
 ## [2026-07-20] 🚀 **`[Коммит]`** Завершение MVP: версионирование сейвов и гарантированная совместимость формата
 - **Conversation ID**: `2e4d49ee-b203-4576-bec8-83fc541dc415`
 

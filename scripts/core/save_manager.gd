@@ -7,15 +7,19 @@ const SAVE_PATH = "user://factory_save.json"
 const SAVE_VERSION = 1
 
 ## Saves the simulation state to disk, embedding a Unix timestamp and format version.
-static func save_game(network: FactoryNetwork, economy: EconomyManager) -> bool:
-	if network == null or economy == null:
+static func save_game(network: FactoryNetwork, res_mgr: ResourceManager, build_mgr: BuildingManager, upg_mgr: UpgradesManager, art_mgr: ArtifactsManager, ms_mgr: MilestonesManager) -> bool:
+	if network == null or res_mgr == null:
 		return false
 		
 	var save_data = {
 		"version": SAVE_VERSION,
 		"timestamp": int(Time.get_unix_time_from_system()),
 		"network": network.to_dict(),
-		"economy": economy.to_dict()
+		"resource_manager": res_mgr.to_dict(),
+		"building_manager": build_mgr.to_dict(),
+		"upgrades_manager": upg_mgr.to_dict(),
+		"artifacts_manager": art_mgr.to_dict(),
+		"milestones_manager": ms_mgr.to_dict()
 	}
 	
 	var json_str = JSON.stringify(save_data)
@@ -29,7 +33,7 @@ static func save_game(network: FactoryNetwork, economy: EconomyManager) -> bool:
 	return true
 
 ## Loads simulation state from disk.
-## Returns a Dictionary with keys "version", "timestamp", "network_dict", "economy_dict", or an empty dictionary if no save exists.
+## Returns a Dictionary with keys "version", "timestamp", "network_dict", and manager dicts, or an empty dictionary if no save exists.
 static func load_game() -> Dictionary:
 	if not FileAccess.file_exists(SAVE_PATH):
 		return {}
@@ -53,11 +57,18 @@ static func load_game() -> Dictionary:
 		printerr("Invalid data type in save file.")
 		return {}
 		
+	# Fallback for old save format
+	var eco_dict = data.get("economy", {})
+	
 	return {
 		"version": int(data.get("version", 0)),
 		"timestamp": int(data.get("timestamp", 0)),
 		"network_dict": data.get("network", {}),
-		"economy_dict": data.get("economy", {})
+		"resource_manager_dict": data.get("resource_manager", eco_dict),
+		"building_manager_dict": data.get("building_manager", eco_dict),
+		"upgrades_manager_dict": data.get("upgrades_manager", eco_dict),
+		"artifacts_manager_dict": data.get("artifacts_manager", eco_dict),
+		"milestones_manager_dict": data.get("milestones_manager", eco_dict)
 	}
 
 

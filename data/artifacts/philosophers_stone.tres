@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="ArtifactData" format=3]
+
+[ext_resource type="Script" path="res://scripts/resources/artifact_data.gd" id="1_sdl6y"]
+
+[resource]
+script = ExtResource("1_sdl6y")
+id = "philosophers_stone"
+name = "Philosopher's Stone"
+description = "+50% Mining Speed & +50% Factory Speed"
+modifiers = {
+"factory_speed": 0.5,
+"miner_speed": 0.5
+}

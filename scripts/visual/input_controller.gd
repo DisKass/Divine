@@ -169,6 +169,6 @@ func _get_building_id_under_mouse() -> int:
 func _get_grid_position_under_mouse() -> Vector2i:
 	var m_pos = get_global_mouse_position()
 	return Vector2i(
-		floorf(m_pos.x / cell_size),
-		floorf(m_pos.y / cell_size)
+		floori(m_pos.x / cell_size),
+		floori(m_pos.y / cell_size)
 	)

@@ -3,8 +3,7 @@ class_name BuildingVisual
 
 ## Visual representation of a building on the grid, syncing with BuildingData.
 
-# Emitted when the building is clicked
-signal clicked(building_id: int)
+
 
 var data: BuildingData
 var cell_size: int = 64
@@ -229,11 +228,8 @@ func _update_resource_list(container: VBoxContainer, resources: Dictionary, limi
 		var res_name = child.name
 		if resources.has(res_name):
 			var val = resources[res_name]
-			var limit = limits.get(res_name, 20.0)
 			# Format resource name (remove "iron_" prefix for cleanliness)
 			var short_name = res_name.replace("iron_", "")
-			# Color coding for resources
-			var col_tag = "[color=#ff8888]" if is_input else "[color=#88ff88]"
 			child.text = "%s: %.1f" % [short_name, val]
 			if is_input:
 				child.add_theme_color_override("font_color", Color(0.8, 0.7, 0.7))

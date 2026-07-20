@@ -1,6 +1,65 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=3 format=3 uid="uid://cx612j23w84f4"]
 
-[ext_resource type="Script" path="res://scripts/visual/inspector_panel.gd" id="1_inspector"]
+[ext_resource type="Script" path="res://scripts/visual/inspector_panel.gd" id="1_insp"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_panel"]
+bg_color = Color(0.08, 0.1, 0.12, 0.9)
+border_width_left = 2
+border_color = Color(0.3, 0.6, 1, 0.3)
 
 [node name="InspectorPanel" type="PanelContainer"]
-script = ExtResource("1_inspector")
+custom_minimum_size = Vector2(250, 0)
+anchors_preset = 11
+anchor_left = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -250.0
+offset_top = 60.0
+offset_bottom = -160.0
+grow_horizontal = 0
+grow_vertical = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_panel")
+script = ExtResource("1_insp")
+
+[node name="VBoxContainer" type="VBoxContainer" parent="."]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="TitleLabel" type="Label" parent="VBoxContainer"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.3, 0.6, 1, 1)
+theme_override_font_sizes/font_size = 14
+text = "Building Inspector"
+horizontal_alignment = 1
+
+[node name="Separator" type="ColorRect" parent="VBoxContainer"]
+custom_minimum_size = Vector2(0, 2)
+layout_mode = 2
+color = Color(0.3, 0.6, 1, 0.3)
+
+[node name="InspectorDetails" type="Label" parent="VBoxContainer"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 11
+text = "ID: 42
+Type: Miner
+Grid Position: (5, 5)
+-------------------------
+Recipe: Iron Ore
+Progress: 0.50 / 1.0
+-------------------------
+Inputs:
+Outputs:
+  - iron_ore: 2.0 / 20.0"
+
+[node name="RecipeSelectorContainer" type="HBoxContainer" parent="VBoxContainer"]
+layout_mode = 2
+
+[node name="RecipeLabel" type="Label" parent="VBoxContainer/RecipeSelectorContainer"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 11
+text = "Recipe:"
+
+[node name="RecipeOptionButton" type="OptionButton" parent="VBoxContainer/RecipeSelectorContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 10
