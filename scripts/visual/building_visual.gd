@@ -27,6 +27,8 @@ func setup(p_data: BuildingData, p_cell_size: int) -> void:
 	
 	# Determine colors based on type
 	match data.type:
+		"portal":
+			accent_color = Color(1.0, 0.65, 0.2) # Portal orange magic
 		"miner":
 			accent_color = Color(0.9, 0.45, 0.1) # Amber / Orange
 		"miner_iron":

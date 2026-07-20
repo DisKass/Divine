@@ -10,9 +10,11 @@ func _init() -> void:
 	verify_economy_rules()
 	verify_resource_flow()
 	verify_multi_recipe_switching()
+	verify_portal_milestones()
 	run_performance_benchmark()
 	
 	quit()
+
 
 func verify_economy_rules() -> void:
 	print("\n--- Verifying Economy and Price Scaling ---")
@@ -259,3 +261,68 @@ func run_performance_benchmark() -> void:
 		print("[FAIL] Offline credits calculation seems low: ", catchup_result["credits_earned"])
 		
 	print("==================================================")
+
+func verify_portal_milestones() -> void:
+	print("\n--- Verifying Portal Building & Milestone Progression ---")
+	var net = FactoryNetwork.new()
+	var economy = EconomyManager.new()
+	economy.resources["credits"] = 100.0
+	
+	# 1. Verify Portal purchase limits
+	var buy1 = economy.buy_building("portal")
+	var buy2 = economy.buy_building("portal")
+	print("Buy Portal 1: ", buy1, ", Buy Portal 2: ", buy2)
+	if buy1 and not buy2:
+		print("[PASS] Portal max count limit (1) enforced correctly.")
+	else:
+		print("[FAIL] Portal max count enforcement failed.")
+		
+	# 2. Add Portal to network
+	var portal = net.add_building("portal", Vector2i(5, 5), {})
+	
+	# 3. Connect a building (constructor producing iron_plate and iron_gear) to Portal
+	var plate_producer = net.add_building("constructor", Vector2i(5, 4), {
+		"inputs": {},
+		"outputs": { "iron_plate": 10.0, "iron_gear": 5.0 },
+		"duration": 1.0
+	})
+	
+	var conn_ok = net.add_connection(plate_producer.id, portal.id)
+	print("Connect Producer -> Portal: ", conn_ok)
+	if conn_ok:
+		print("[PASS] Connection to Portal established.")
+	else:
+		print("[FAIL] Failed to connect to Portal.")
+		
+	# Listen to milestone signal
+	var milestone_count = [0]
+	economy.milestone_completed.connect(func(tier, data):
+		milestone_count[0] += 1
+		print("SIGNAL RECEIVED: Milestone Tier %d (%s) Completed!" % [tier, data["name"]])
+	)
+	
+	# Run ticks to deliver resources
+	print("Simulating ticks for Portal deliveries...")
+	# Tick 1: Producer outputs items
+	net.tick(1.0, economy)
+	# Tick 2: Items transfer to Portal and are submitted to economy
+	net.tick(1.0, economy)
+	
+	var m_status1 = economy.get_current_milestone()
+	print("Progress after 1 batch: ", m_status1["progress"])
+	
+	# Tick 3 & 4: Deliver second batch (total 20 iron_plate, 10 iron_gear -> completes Tier 1 requirement)
+	net.tick(1.0, economy)
+	net.tick(1.0, economy)
+	
+	var m_status2 = economy.get_current_milestone()
+	print("Current Milestone after 2nd batch: Tier ", m_status2["tier"], " - ", m_status2["name"])
+	
+	if milestone_count[0] == 1 and int(m_status2.get("tier", 0)) == 2:
+		print("[PASS] Portal delivery and Milestone Tier 1 completion verified successfully!")
+	else:
+		print("[FAIL] Milestone completion failed. Expected Tier 2, got: ", m_status2)
+
+
+
+

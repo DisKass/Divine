@@ -16,7 +16,17 @@ extends RefCounted
 ##   ]
 ## }
 const DATA: Dictionary = {
+	"portal": [
+		{
+			"id": "portal_receive",
+			"name": "Deliver Milestones",
+			"inputs": {},
+			"outputs": {},
+			"duration": 1.0
+		}
+	],
 	"miner": [
+
 		{
 			"id": "iron_ore",
 			"name": "Mine Iron Ore",

@@ -21,6 +21,7 @@ var batch_mode: bool = false
 var _buildings_list: Array[BuildingData] = []
 var _connection_cache: Array = [] # Array of cached connection structures: [from_building, to_building, resource_list]
 var _credits_producers: Array[BuildingData] = [] # Cache of buildings that output credits
+var _portals: Array[BuildingData] = [] # Cache of portal buildings
 
 ## Adds a new building to the network.
 func add_building(type: String, pos: Vector2i, recipe: Dictionary) -> BuildingData:
@@ -71,10 +72,16 @@ func add_connection(from_id: int, to_id: int) -> bool:
 	
 	# Verify that the output of from_b matches at least one input of to_b
 	var has_matching_resource = false
-	for out_res in from_b.outputs:
-		if to_b.inputs.has(out_res):
+	if to_b.type == "portal":
+		for out_res in from_b.outputs:
+			to_b.inputs[out_res] = to_b.inputs.get(out_res, 0.0)
+			to_b.input_limits[out_res] = 9999.0
 			has_matching_resource = true
-			break
+	else:
+		for out_res in from_b.outputs:
+			if to_b.inputs.has(out_res):
+				has_matching_resource = true
+				break
 			
 	if not has_matching_resource:
 		return false
@@ -115,10 +122,13 @@ func rebuild_caches() -> void:
 	# 1. Rebuild building list
 	_buildings_list.clear()
 	_credits_producers.clear()
+	_portals.clear()
 	for b in buildings.values():
 		_buildings_list.append(b)
 		if b.outputs.has("credits"):
 			_credits_producers.append(b)
+		if b.type == "portal":
+			_portals.append(b)
 		
 	# 2. Rebuild connection cache with direct object references and intersecting resources
 	_connection_cache.clear()
@@ -129,9 +139,15 @@ func rebuild_caches() -> void:
 		if from_b and to_b:
 			# Find which resources can be transferred from source outputs to target inputs
 			var shared_resources: Array[String] = []
-			for out_res in from_b.outputs:
-				if to_b.inputs.has(out_res):
+			if to_b.type == "portal":
+				for out_res in from_b.outputs:
+					to_b.inputs[out_res] = to_b.inputs.get(out_res, 0.0)
+					to_b.input_limits[out_res] = 9999.0
 					shared_resources.append(out_res)
+			else:
+				for out_res in from_b.outputs:
+					if to_b.inputs.has(out_res):
+						shared_resources.append(out_res)
 					
 			if not shared_resources.is_empty():
 				_connection_cache.append([from_b, to_b, shared_resources])
@@ -170,13 +186,21 @@ func tick(delta: float = 1.0, economy: EconomyManager = null) -> void:
 			from_b.outputs[res] -= amount
 			to_b.inputs[res] += amount
 			
-	# 3. Harvest global credits from outputs directly to economy
+	# 3. Harvest global credits from outputs & process Portal deliveries directly to economy
 	if economy != null:
 		for b in _credits_producers:
 			var amt = b.outputs.get("credits", 0.0)
 			if amt > 0.0:
 				economy.add_resource("credits", amt)
 				b.outputs["credits"] = 0.0
+				
+		for p in _portals:
+			for res in p.inputs.keys():
+				var amt = float(p.inputs[res])
+				if amt > 0.0:
+					economy.submit_portal_resource(res, amt)
+					p.inputs[res] = 0.0
+
 
 ## Serializes the entire network.
 func to_dict() -> Dictionary:

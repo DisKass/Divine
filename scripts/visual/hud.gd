@@ -10,7 +10,8 @@ const EconomyManager = preload("res://scripts/core/economy_manager.gd")
 
 # HUD elements
 var credits_label: Label
-var stats_label: Label
+var milestone_label: Label
+var stats_menu: MenuButton
 var tool_buttons: Dictionary = {}
 var tool_cost_labels: Dictionary = {}
 var _scroll_container: ScrollContainer
@@ -22,6 +23,7 @@ var _scroll_drag_start_val: int
 var _scroll_has_dragged: bool = false
 
 const BUILDING_DESCRIPTIONS: Dictionary = {
+	"portal": "Deliver Milestones",
 	"miner_iron": "➔ Iron Ore",
 	"miner_coal": "➔ Coal",
 	"miner_crystal": "➔ Mana Crystal",
@@ -67,12 +69,22 @@ func _create_hud() -> void:
 	credits_label.add_theme_constant_override("outline_size", 4)
 	top_hbox.add_child(credits_label)
 	
-	stats_label = Label.new()
-	stats_label.text = "Miners: 0 | Smelters: 0"
-	stats_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	stats_label.add_theme_font_size_override("font_size", 12)
-	stats_label.add_theme_color_override("font_color", Color(0.7, 0.8, 0.9))
-	top_hbox.add_child(stats_label)
+	milestone_label = Label.new()
+	milestone_label.text = "Milestone: Tier 1 - Loading..."
+	milestone_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	milestone_label.add_theme_font_size_override("font_size", 13)
+	milestone_label.add_theme_color_override("font_color", Color(0.95, 0.7, 0.3))
+	milestone_label.add_theme_color_override("font_outline_color", Color.BLACK)
+	milestone_label.add_theme_constant_override("outline_size", 3)
+	top_hbox.add_child(milestone_label)
+
+	stats_menu = MenuButton.new()
+	stats_menu.text = "Buildings (0) ▾"
+	stats_menu.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	stats_menu.add_theme_font_size_override("font_size", 13)
+	stats_menu.add_theme_color_override("font_color", Color(0.7, 0.8, 0.9))
+	stats_menu.add_theme_color_override("font_hover_color", Color(1.0, 1.0, 1.0))
+	top_hbox.add_child(stats_menu)
 	
 	var spacer = Control.new()
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -87,6 +99,7 @@ func _create_hud() -> void:
 	var top_margin_r = Control.new()
 	top_margin_r.custom_minimum_size = Vector2(10, 0)
 	top_hbox.add_child(top_margin_r)
+
 	
 	# Bottom Toolbar Panel
 	var bottom_panel = PanelContainer.new()
@@ -122,7 +135,7 @@ func _create_hud() -> void:
 	_scroll_container.add_child(bot_hbox)
 	
 	# Build buttons (cards)
-	var card_types = ["miner_iron", "miner_coal", "miner_crystal", "crusher", "smelter", "constructor", "alchemy_lab", "artifact_altar", "seller"]
+	var card_types = ["portal", "miner_iron", "miner_coal", "miner_crystal", "crusher", "smelter", "constructor", "alchemy_lab", "artifact_altar", "seller"]
 	for b_type in card_types:
 		_create_building_card(bot_hbox, b_type)
 		
@@ -134,6 +147,8 @@ func _create_hud() -> void:
 
 func _get_accent_color(type: String) -> Color:
 	match type:
+		"portal":
+			return Color(1.0, 0.65, 0.2)
 		"miner":
 			return Color(0.9, 0.45, 0.1)
 		"miner_iron":
@@ -297,11 +312,29 @@ func _on_building_button_pressed(b_type: String) -> void:
 
 ## Main update call to refresh labels, stats, prices and button disable/enabled states.
 func update_hud(economy: EconomyManager, credits_per_tick: float, current_mode: int, selected_build_type: String) -> void:
-	# 1. Update resource count
+	# 1. Update resource count & milestone status
 	var credits = economy.get_resource("credits")
 	credits_label.text = "Credits: $%.1f (+%.1f/s)" % [credits, credits_per_tick]
 	
-	# 2. Update global stats
+	var m_info = economy.get_current_milestone()
+	if m_info.get("completed_all", false):
+		milestone_label.text = "Milestone: All Tiers Completed! 🏆"
+	else:
+		var reqs: Dictionary = m_info.get("requirements", {})
+		var prog: Dictionary = m_info.get("progress", {})
+		var req_strs: Array[String] = []
+		for res in reqs:
+			var cur_val = int(prog.get(res, 0.0))
+			var target_val = int(reqs[res])
+			req_strs.append("%d/%d %s" % [cur_val, target_val, res.replace("_", " ").capitalize()])
+		milestone_label.text = "Milestone [Tier %d - %s]: %s" % [
+			int(m_info.get("tier", 1)),
+			m_info.get("name", ""),
+			", ".join(req_strs)
+		]
+	
+	# 2. Update global stats dropdown
+	var portals = economy.building_counts.get("portal", 0)
 	var miners = economy.building_counts.get("miner", 0) + economy.building_counts.get("miner_iron", 0) + economy.building_counts.get("miner_coal", 0) + economy.building_counts.get("miner_crystal", 0)
 	var smelters = economy.building_counts.get("smelter", 0)
 	var constructors = economy.building_counts.get("constructor", 0)
@@ -309,9 +342,23 @@ func update_hud(economy: EconomyManager, credits_per_tick: float, current_mode: 
 	var crushers = economy.building_counts.get("crusher", 0)
 	var labs = economy.building_counts.get("alchemy_lab", 0)
 	var altars = economy.building_counts.get("artifact_altar", 0)
-	stats_label.text = "Miners: %d | Crushers: %d | Smelters: %d | Constructors: %d | Labs: %d | Altars: %d | Sellers: %d" % [
-		miners, crushers, smelters, constructors, labs, altars, sellers
-	]
+	var total_buildings = portals + miners + crushers + smelters + constructors + labs + altars + sellers
+	
+	stats_menu.text = "Buildings (%d) ▾" % total_buildings
+	
+	var popup = stats_menu.get_popup()
+	popup.clear()
+	popup.add_item("Portal: %d / 1" % portals)
+	popup.add_item("Miners: %d" % miners)
+	popup.add_item("Crushers: %d" % crushers)
+	popup.add_item("Smelters: %d" % smelters)
+	popup.add_item("Constructors: %d" % constructors)
+	popup.add_item("Labs: %d" % labs)
+	popup.add_item("Altars: %d" % altars)
+	popup.add_item("Sellers: %d" % sellers)
+	for i in range(popup.item_count):
+		popup.set_item_disabled(i, true)
+
 	
 	# 3. Update toggle states for buttons
 	for btn_name in tool_buttons:
@@ -327,21 +374,25 @@ func update_hud(economy: EconomyManager, credits_per_tick: float, current_mode: 
 	if tool_buttons.has(active_btn_name):
 		tool_buttons[active_btn_name].button_pressed = true
 		
-	# 4. Update prices and disable unaffordable items
-	for b_type in ["miner_iron", "miner_coal", "miner_crystal", "crusher", "smelter", "constructor", "alchemy_lab", "artifact_altar", "seller"]:
+	# 4. Update prices and disable unaffordable / maxed items
+	for b_type in ["portal", "miner_iron", "miner_coal", "miner_crystal", "crusher", "smelter", "constructor", "alchemy_lab", "artifact_altar", "seller"]:
 		if tool_buttons.has(b_type):
 			var btn: Button = tool_buttons[b_type]
 			var cost = economy.get_building_cost(b_type)
 			var price_lbl = tool_cost_labels.get(b_type)
+			var limit_reached = economy.is_building_limit_reached(b_type)
+			
 			if price_lbl:
-				if cost.is_empty():
+				if limit_reached:
+					price_lbl.text = "Max Built"
+				elif cost.is_empty():
 					price_lbl.text = "Free"
 				else:
 					var cost_val = cost.get("credits", 0.0)
 					price_lbl.text = "$%.1f" % cost_val
 					
 			var is_selected_type = (current_mode == 1 and selected_build_type == b_type)
-			if not economy.can_afford(b_type) and not is_selected_type:
+			if (limit_reached or not economy.can_afford(b_type)) and not is_selected_type:
 				btn.disabled = true
 				if price_lbl:
 					price_lbl.add_theme_color_override("font_color", Color(0.9, 0.3, 0.3))
@@ -349,3 +400,4 @@ func update_hud(economy: EconomyManager, credits_per_tick: float, current_mode: 
 				btn.disabled = false
 				if price_lbl:
 					price_lbl.add_theme_color_override("font_color", Color(1.0, 0.9, 0.3))
+

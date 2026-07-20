@@ -182,11 +182,13 @@ func _handle_build(grid_pos: Vector2i) -> void:
 		
 	# Process purchase
 	if economy.buy_building(selected_build_type):
-		var recipe = default_recipes[selected_build_type].duplicate(true)
+		var default_rec = default_recipes.get(selected_build_type, {})
+		var recipe = default_rec.duplicate(true) if not default_rec.is_empty() else {}
 		var b_data = network.add_building(selected_build_type, grid_pos, recipe)
 		_create_building_visual(b_data)
 		_update_ui()
 		# Remain in build mode for quick placements!
+
 
 func _handle_link(building_id: int) -> void:
 	if building_id == 0:

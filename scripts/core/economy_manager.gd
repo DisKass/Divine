@@ -27,6 +27,37 @@ var building_counts: Dictionary = {}
 # }
 var cost_configs: Dictionary = {}
 
+signal milestone_completed(tier: int, milestone_data: Dictionary)
+
+const MILESTONES: Array[Dictionary] = [
+	{
+		"tier": 1,
+		"name": "Industrial Foundation",
+		"requirements": {
+			"iron_plate": 20.0,
+			"iron_gear": 10.0
+		}
+	},
+	{
+		"tier": 2,
+		"name": "Alchemical Synthesis",
+		"requirements": {
+			"iron_ingot": 30.0,
+			"mana_essence": 15.0
+		}
+	},
+	{
+		"tier": 3,
+		"name": "Artifact Mastery",
+		"requirements": {
+			"runesteel_ingot": 10.0
+		}
+	}
+]
+
+var current_milestone_index: int = 0
+var milestone_progress: Dictionary = {}
+
 func _init() -> void:
 	# Initialize default resources
 	resources["credits"] = 85.0 # Starter credits
@@ -40,6 +71,12 @@ func _init() -> void:
 	
 	# Set up default cost configs
 	cost_configs = {
+		"portal": {
+			"multiplier": 1.0,
+			"max_count": 1,
+			"base_costs": { "credits": 50.0 },
+			"first_paid_costs": { "credits": 50.0 }
+		},
 		"miner": {
 			"multiplier": 1.15,
 			"base_costs": {}, # First miner is free!
@@ -92,8 +129,20 @@ func _init() -> void:
 		}
 	}
 
+## Returns whether building count has reached max allowed count for building type.
+func is_building_limit_reached(type: String) -> bool:
+	var config = cost_configs.get(type, {})
+	if config.has("max_count"):
+		var max_cnt = int(config["max_count"])
+		var current_cnt = building_counts.get(type, 0)
+		return current_cnt >= max_cnt
+	return false
+
 ## Returns the cost dictionary for the next building of the specified type.
 func get_building_cost(type: String) -> Dictionary:
+	if is_building_limit_reached(type):
+		return {}
+		
 	var count = building_counts.get(type, 0)
 	var config = cost_configs.get(type, {})
 	if config.is_empty():
@@ -115,6 +164,8 @@ func get_building_cost(type: String) -> Dictionary:
 
 ## Checks if the player can afford a building.
 func can_afford(type: String) -> bool:
+	if is_building_limit_reached(type):
+		return false
 	var cost = get_building_cost(type)
 	for res in cost:
 		if resources.get(res, 0.0) < cost[res]:
@@ -132,6 +183,58 @@ func buy_building(type: String) -> bool:
 		
 	building_counts[type] = building_counts.get(type, 0) + 1
 	return true
+
+## Submits delivered resources from Portal and checks for milestone completion.
+func submit_portal_resource(res_name: String, amount: float) -> void:
+	if current_milestone_index >= MILESTONES.size():
+		return # All milestones already completed
+		
+	var active_m = MILESTONES[current_milestone_index]
+	var reqs: Dictionary = active_m.get("requirements", {})
+	
+	if reqs.has(res_name):
+		var target = float(reqs[res_name])
+		var current = milestone_progress.get(res_name, 0.0)
+		var space = maxf(target - current, 0.0)
+		var added = minf(amount, space)
+		if added > 0.0:
+			milestone_progress[res_name] = current + added
+			check_milestone_completion()
+
+## Checks if active milestone is fulfilled and advances to next.
+func check_milestone_completion() -> void:
+	if current_milestone_index >= MILESTONES.size():
+		return
+		
+	var active_m = MILESTONES[current_milestone_index]
+	var reqs: Dictionary = active_m.get("requirements", {})
+	
+	var is_fulfilled = true
+	for res in reqs:
+		if milestone_progress.get(res, 0.0) < float(reqs[res]):
+			is_fulfilled = false
+			break
+			
+	if is_fulfilled:
+		var completed_m = active_m
+		current_milestone_index += 1
+		milestone_progress.clear()
+		milestone_completed.emit(int(completed_m["tier"]), completed_m)
+
+## Returns info on active milestone and progress.
+func get_current_milestone() -> Dictionary:
+	if current_milestone_index >= MILESTONES.size():
+		return {
+			"completed_all": true,
+			"tier": MILESTONES.size(),
+			"name": "All Milestones Completed",
+			"requirements": {},
+			"progress": {}
+		}
+	var m = MILESTONES[current_milestone_index].duplicate(true)
+	m["completed_all"] = false
+	m["progress"] = milestone_progress.duplicate()
+	return m
 
 ## Processes the demolition of a building, decrementing the count and refunding 100% of the cost.
 func refund_building(type: String) -> void:
@@ -158,10 +261,15 @@ func get_resource(name: String) -> float:
 func to_dict() -> Dictionary:
 	return {
 		"resources": resources.duplicate(),
-		"building_counts": building_counts.duplicate()
+		"building_counts": building_counts.duplicate(),
+		"current_milestone_index": current_milestone_index,
+		"milestone_progress": milestone_progress.duplicate()
 	}
 
 ## Deserializes and restores the economy manager.
 func from_dict(dict: Dictionary) -> void:
 	resources = dict.get("resources", {}).duplicate()
 	building_counts = dict.get("building_counts", {}).duplicate()
+	current_milestone_index = int(dict.get("current_milestone_index", 0))
+	milestone_progress = dict.get("milestone_progress", {}).duplicate()
+
