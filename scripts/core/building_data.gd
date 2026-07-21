@@ -161,9 +161,16 @@ static func from_dict(dict: Dictionary) -> BuildingData:
 	
 	var b = BuildingData.new(int(dict["id"]), dict["type"], pos, recipe, size)
 	
-	b.inputs = dict.get("inputs", {}).duplicate()
+	var raw_inputs: Dictionary = dict.get("inputs", {})
+	for res in raw_inputs:
+		b.inputs[res] = roundf(float(raw_inputs[res]))
+		
 	b.input_limits = dict.get("input_limits", {}).duplicate()
-	b.outputs = dict.get("outputs", {}).duplicate()
+	
+	var raw_outputs: Dictionary = dict.get("outputs", {})
+	for res in raw_outputs:
+		b.outputs[res] = roundf(float(raw_outputs[res]))
+		
 	b.output_limits = dict.get("output_limits", {}).duplicate()
 	b.production_progress = dict.get("production_progress", 0.0)
 	b.is_producing = dict.get("is_producing", false)

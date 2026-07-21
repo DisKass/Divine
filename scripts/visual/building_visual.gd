@@ -238,10 +238,10 @@ func _update_resource_list(container: VBoxContainer, resources: Dictionary, limi
 	for child in container.get_children():
 		var res_name = child.name
 		if resources.has(res_name):
-			var val = resources[res_name]
+			var val = int(round(resources[res_name]))
 			# Format resource name (remove "iron_" prefix for cleanliness)
 			var short_name = res_name.replace("iron_", "")
-			child.text = "%s: %.1f" % [short_name, val]
+			child.text = "%s: %d" % [short_name, val]
 			if is_input:
 				child.add_theme_color_override("font_color", Color(0.8, 0.7, 0.7))
 			else:

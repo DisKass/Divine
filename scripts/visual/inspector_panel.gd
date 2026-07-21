@@ -39,9 +39,9 @@ func update_inspector_new(b_data: BuildingData, build_mgr: BuildingManager) -> v
 			var reqs: Dictionary = m_info.get("requirements", {})
 			var prog: Dictionary = m_info.get("progress", {})
 			for res in reqs:
-				var cur_val = float(prog.get(res, 0.0))
-				var target_val = float(reqs[res])
-				text += "   • %s: %.1f / %.1f\n" % [res.replace("_", " ").capitalize(), cur_val, target_val]
+				var cur_val = int(round(float(prog.get(res, 0.0))))
+				var target_val = int(round(float(reqs[res])))
+				text += "   • %s: %d / %d\n" % [res.replace("_", " ").capitalize(), cur_val, target_val]
 	else:
 		if not b_data.active_recipe.is_empty():
 			text += "Recipe: %s\n" % b_data.active_recipe.get("name", b_data.active_recipe.get("id", "Unknown"))
@@ -52,11 +52,11 @@ func update_inspector_new(b_data: BuildingData, build_mgr: BuildingManager) -> v
 		text += "-------------------------\n"
 		text += "Inputs:\n"
 		for res in b_data.inputs:
-			text += "  - %s: %.1f / %.1f\n" % [res, b_data.inputs[res], b_data.input_limits.get(res, 20.0)]
+			text += "  - %s: %d / %d\n" % [res, int(round(b_data.inputs[res])), int(round(b_data.input_limits.get(res, 20.0)))]
 			
 		text += "Outputs:\n"
 		for res in b_data.outputs:
-			text += "  - %s: %.1f / %.1f\n" % [res, b_data.outputs[res], b_data.output_limits.get(res, 20.0)]
+			text += "  - %s: %d / %d\n" % [res, int(round(b_data.outputs[res])), int(round(b_data.output_limits.get(res, 20.0)))]
 		
 	inspector_details.text = text
 

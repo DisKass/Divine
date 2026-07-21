@@ -5,13 +5,15 @@ class_name ConnectionRenderer
 
 @export var line_color: Color = Color(0.2, 0.6, 0.9, 0.6) # Sleek transparent blue
 @export var line_width: float = 3.0
-@export var packet_speed_px: float = 140.0 # Speed in pixels per second
+@export var packet_length: float = 30.0 # Length of the flying elongated resource segment
+@export var packet_width: float = 5.0 # Width of the resource segment
 
 class ResourcePacket:
 	var from_id: int
 	var to_id: int
 	var resource_name: String
-	var progress: float = 0.0 # 0.0 to 1.0
+	var progress: float = 0.0 # Center position in pixels along travel path
+	var max_travel_dist: float = 0.0
 	var speed: float = 1.0
 
 var network: FactoryNetwork
@@ -28,7 +30,7 @@ func setup(p_network: FactoryNetwork, p_visuals_map: Dictionary) -> void:
 	if network != null:
 		network.resource_transferred.connect(_on_resource_transferred)
 
-func _on_resource_transferred(from_id: int, to_id: int, resource_name: String, _amount: float) -> void:
+func _on_resource_transferred(from_id: int, to_id: int, resource_name: String, _amount: float, transfer_rate: float) -> void:
 	var from_vis: BuildingVisual = visuals_map.get(from_id)
 	var to_vis: BuildingVisual = visuals_map.get(to_id)
 	
@@ -38,15 +40,18 @@ func _on_resource_transferred(from_id: int, to_id: int, resource_name: String, _
 	var start_pt = from_vis.get_connection_point_toward(to_vis.global_position)
 	var end_pt = to_vis.get_connection_point_toward(from_vis.global_position)
 	var dist = start_pt.distance_to(end_pt)
-	if dist < 5.0:
+	if dist < 1.0:
 		return
 		
+	var half_len = packet_length * 0.5
 	var packet = ResourcePacket.new()
 	packet.from_id = from_id
 	packet.to_id = to_id
 	packet.resource_name = resource_name
-	packet.progress = 0.0
-	packet.speed = packet_speed_px / dist # Complete full path based on distance
+	packet.progress = -half_len
+	packet.max_travel_dist = dist + half_len
+	# Entire visual travel path is (dist + packet_length) pixels.
+	packet.speed = (dist + packet_length) * maxf(transfer_rate, 0.1)
 	active_packets.append(packet)
 
 func _process(delta: float) -> void:
@@ -54,7 +59,7 @@ func _process(delta: float) -> void:
 	while i < active_packets.size():
 		var pkt = active_packets[i]
 		pkt.progress += pkt.speed * delta
-		if pkt.progress >= 1.0:
+		if pkt.progress >= pkt.max_travel_dist:
 			active_packets.remove_at(i)
 		else:
 			i += 1
@@ -81,7 +86,7 @@ func _draw() -> void:
 		
 		draw_line(start_pt, end_pt, line_color, line_width)
 		
-	# 2. Draw flying resource dots
+	# 2. Draw flying elongated resource segments
 	for pkt in active_packets:
 		var from_vis: BuildingVisual = visuals_map.get(pkt.from_id)
 		var to_vis: BuildingVisual = visuals_map.get(pkt.to_id)
@@ -91,10 +96,22 @@ func _draw() -> void:
 			
 		var start_pt = from_vis.get_connection_point_toward(to_vis.global_position)
 		var end_pt = to_vis.get_connection_point_toward(from_vis.global_position)
-		var pos = start_pt.lerp(end_pt, clampf(pkt.progress, 0.0, 1.0))
+		var total_len = start_pt.distance_to(end_pt)
+		if total_len < 1.0:
+			continue
+			
+		var dir = (end_pt - start_pt) / total_len
+		var center_dist = pkt.progress
+		var half_len = packet_length * 0.5
 		
-		var color = _get_resource_color(pkt.resource_name)
-		draw_circle(pos, 3.5, color)
+		var head_dist = clampf(center_dist + half_len, 0.0, total_len)
+		var tail_dist = clampf(center_dist - half_len, 0.0, total_len)
+		
+		if tail_dist < head_dist:
+			var p_tail = start_pt + dir * tail_dist
+			var p_head = start_pt + dir * head_dist
+			var color = _get_resource_color(pkt.resource_name)
+			draw_line(p_tail, p_head, color, packet_width)
 
 func _get_resource_color(res_name: String) -> Color:
 	match res_name:
