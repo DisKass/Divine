@@ -4,6 +4,8 @@ extends RefCounted
 ## Manages the factory graph, connections, and resource distribution simulation.
 ## Highly optimized using pre-cached references for high-speed offline simulation.
 
+signal resource_transferred(from_id: int, to_id: int, resource_name: String, amount: float)
+
 # Map of building ID -> BuildingData
 var buildings: Dictionary = {}
 # Map of Vector2i -> building ID (for collision checks)
@@ -189,7 +191,7 @@ func rebuild_caches() -> void:
 						shared_resources.append(out_res)
 					
 			if not shared_resources.is_empty():
-				_connection_cache.append([from_b, to_b, shared_resources])
+				_connection_cache.append([from_b, to_b, shared_resources, conn])
 
 ## Performs a single step of the simulation network (delta in seconds, usually 1.0).
 func tick(delta: float = 1.0, resource_mgr: ResourceManager = null, modifier_mgr: ModifierManager = null, milestones_mgr: MilestonesManager = null, artifacts_mgr: ArtifactsManager = null) -> void:
@@ -209,6 +211,11 @@ func tick(delta: float = 1.0, resource_mgr: ResourceManager = null, modifier_mgr
 		var speed_mult = miner_speed_mult if b.type.begins_with("miner") else factory_speed_mult
 		b.tick(delta, speed_mult)
 		
+	# Reset transfer activity flags on connections
+	for conn in connections:
+		conn["is_active"] = false
+		conn["flow_rate"] = 0.0
+		
 	# 2. Distribute resources along connections
 	# Default transfer rate: 1.0 item per second base
 	var transfer_rate = 1.0 * (1.0 + logistics_bonus)
@@ -218,6 +225,7 @@ func tick(delta: float = 1.0, resource_mgr: ResourceManager = null, modifier_mgr
 		var from_b: BuildingData = cache[0]
 		var to_b: BuildingData = cache[1]
 		var resources: Array = cache[2]
+		var conn_dict: Dictionary = cache[3]
 		
 		for res in resources:
 			var available = from_b.outputs.get(res, 0.0)
@@ -233,9 +241,12 @@ func tick(delta: float = 1.0, resource_mgr: ResourceManager = null, modifier_mgr
 				
 			# Transfer limit is the minimum of what is available, what can fit, and max transfer rate
 			var amount = minf(available, minf(space, max_transfer))
-			
-			from_b.outputs[res] -= amount
-			to_b.inputs[res] += amount
+			if amount > 0.0:
+				from_b.outputs[res] -= amount
+				to_b.inputs[res] += amount
+				conn_dict["is_active"] = true
+				conn_dict["flow_rate"] = transfer_rate
+				resource_transferred.emit(from_b.id, to_b.id, res, amount)
 			
 	# 3. Harvest global credits from outputs, process Portal deliveries & collect crafted Artifacts
 	if resource_mgr != null:
