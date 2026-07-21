@@ -54,7 +54,7 @@ func verify_save_system_compatibility() -> void:
 	var legacy_safe = legacy_res.get_resource("credits") == 50.0
 	print("Legacy Save Fallback Load -> Safe: ", legacy_safe)
 	
-	if save_ok and loaded.get("version", 0) == 1 and lvl_ok and eq_ok and inv_ok and credits_ok and legacy_safe:
+	if save_ok and loaded.get("version", 0) == 2 and lvl_ok and eq_ok and inv_ok and credits_ok and legacy_safe:
 		print("[PASS] Save system versioning, full state serialization, and legacy format migration verified successfully!")
 	else:
 		print("[FAIL] Save system compatibility verification failed.")

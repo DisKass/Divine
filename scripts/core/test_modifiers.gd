@@ -30,14 +30,15 @@ func verify_upgrades_shop() -> void:
 	
 	var net = FactoryNetwork.new()
 	var miner = net.add_building("miner", Vector2i(0, 0), {})
-	var smelter = net.add_building("smelter", Vector2i(0, 1), {
+	miner.outputs["iron_ore"] = 0.0
+	var smelter = net.add_building("smelter", Vector2i(0, 4), {
 		"inputs": { "iron_ore": 1.0 },
 		"outputs": { "iron_plate": 1.0 },
 		"duration": 1.0
 	})
 	
-	miner.outputs["iron_ore"] = 2.0
 	net.add_connection(miner.id, smelter.id)
+	miner.outputs["iron_ore"] = 2.0
 	
 	net.tick(1.0, res_mgr, mod_mgr, ms_mgr, art_mgr) # Internal test tick
 	

@@ -9,6 +9,7 @@ var data: BuildingData
 var cell_size: int = 64
 var is_selected: bool = false
 var is_hovered: bool = false
+var is_invalid_drag: bool = false
 
 # UI references
 var panel: PanelContainer
@@ -51,17 +52,19 @@ func setup(p_data: BuildingData, p_cell_size: int) -> void:
 		_:
 			accent_color = Color(0.7, 0.7, 0.7)
 			
-	# Set visual position (centered on grid cell)
-	position = Vector2(data.grid_position) * cell_size + Vector2(cell_size / 2.0, cell_size / 2.0)
+	# Set visual position (centered on building footprint)
+	var size_px = Vector2(data.size_in_cells * cell_size)
+	position = Vector2(data.grid_position) * cell_size + size_px / 2.0
 	
 	_create_ui()
 	_update_ui()
 
 func _create_ui() -> void:
+	var size_px = Vector2(data.size_in_cells * cell_size)
 	# Create PanelContainer for the building block
 	panel = PanelContainer.new()
-	panel.custom_minimum_size = Vector2(110, 90)
-	panel.position = Vector2(-55, -45) # Centered
+	panel.custom_minimum_size = size_px
+	panel.position = -size_px / 2.0 # Centered
 	
 	# Create Custom StyleBox for the panel
 	var style = StyleBoxFlat.new()
@@ -172,10 +175,18 @@ func _update_ui() -> void:
 	_update_resource_list(inputs_container, data.inputs, data.input_limits, true)
 	_update_resource_list(outputs_container, data.outputs, data.output_limits, false)
 	
-	# Update glow/borders based on selection and hover
+	# Update glow/borders based on selection, hover, and invalid drag
 	var style = panel.get_theme_stylebox("panel") as StyleBoxFlat
 	if style:
-		if is_selected:
+		if is_invalid_drag:
+			style.border_color = Color(0.9, 0.25, 0.25) # Bright red for collision during drag
+			style.border_width_left = 3
+			style.border_width_right = 3
+			style.border_width_top = 3
+			style.border_width_bottom = 3
+			style.shadow_size = 8
+			style.shadow_color = Color(0.9, 0.25, 0.25, 0.4)
+		elif is_selected:
 			style.border_color = Color(1.0, 0.9, 0.3) # Golden border for selection
 			style.border_width_left = 3
 			style.border_width_right = 3
@@ -242,10 +253,10 @@ func get_connection_point_toward(target_pos: Vector2) -> Vector2:
 	var dir = (target_pos - my_center).normalized()
 	
 	# Bounding box of the panel
-	var half_width = 55.0
-	var half_height = 45.0
+	var half_width = data.size_in_cells.x * cell_size / 2.0
+	var half_height = data.size_in_cells.y * cell_size / 2.0
 	
-	# Find intersection of dir line with bounding box of size (110x90)
+	# Find intersection of dir line with bounding box of size (width x height)
 	if dir.x == 0:
 		return my_center + Vector2(0, signf(dir.y) * half_height)
 		

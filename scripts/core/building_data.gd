@@ -4,9 +4,27 @@ extends RefCounted
 ## Represents a building instance in the factory simulation.
 ## Decoupled from Godot's visual representation for high-performance tick execution.
 
+const DEFAULT_SIZES: Dictionary = {
+	"miner": Vector2i(3, 2),
+	"miner_iron": Vector2i(3, 2),
+	"miner_coal": Vector2i(3, 2),
+	"miner_crystal": Vector2i(3, 2),
+	"crusher": Vector2i(5, 3),
+	"smelter": Vector2i(5, 3),
+	"constructor": Vector2i(5, 3),
+	"alchemy_lab": Vector2i(5, 3),
+	"portal": Vector2i(5, 4),
+	"artifact_altar": Vector2i(5, 4),
+	"seller": Vector2i(5, 3)
+}
+
+static func get_default_size(p_type: String) -> Vector2i:
+	return DEFAULT_SIZES.get(p_type, Vector2i(5, 3))
+
 var id: int
 var type: String
 var grid_position: Vector2i
+var size_in_cells: Vector2i = Vector2i(5, 3)
 
 # Buffers: resource_name (String) -> amount (float)
 var inputs: Dictionary = {}
@@ -25,11 +43,12 @@ var active_recipe: Dictionary = {}
 var production_progress: float = 0.0
 var is_producing: bool = false
 
-func _init(p_id: int, p_type: String, p_pos: Vector2i, p_recipe: Dictionary = {}) -> void:
+func _init(p_id: int, p_type: String, p_pos: Vector2i, p_recipe: Dictionary = {}, p_size: Vector2i = Vector2i.ZERO) -> void:
 	id = p_id
 	type = p_type
 	grid_position = p_pos
 	active_recipe = p_recipe
+	size_in_cells = p_size if p_size != Vector2i.ZERO else get_default_size(p_type)
 	
 	# Initialize buffers from recipe if present
 	if not active_recipe.is_empty():
@@ -44,6 +63,14 @@ func _init(p_id: int, p_type: String, p_pos: Vector2i, p_recipe: Dictionary = {}
 			outputs[res] = 0.0
 			# Output buffer limit is 10x recipe requirements or a minimum default of 20
 			output_limits[res] = maxf(r_outputs[res] * 10.0, 20.0)
+
+## Returns all grid cell coordinates occupied by this building.
+func get_occupied_cells() -> Array[Vector2i]:
+	var cells: Array[Vector2i] = []
+	for x in range(size_in_cells.x):
+		for y in range(size_in_cells.y):
+			cells.append(grid_position + Vector2i(x, y))
+	return cells
 
 ## Changes the active recipe of the building, resetting production progress and buffers.
 func set_recipe(p_recipe: Dictionary) -> void:
@@ -116,6 +143,7 @@ func to_dict() -> Dictionary:
 		"id": id,
 		"type": type,
 		"grid_position": [grid_position.x, grid_position.y],
+		"size_in_cells": [size_in_cells.x, size_in_cells.y],
 		"inputs": inputs.duplicate(),
 		"input_limits": input_limits.duplicate(),
 		"outputs": outputs.duplicate(),
@@ -129,7 +157,9 @@ func to_dict() -> Dictionary:
 static func from_dict(dict: Dictionary) -> BuildingData:
 	var pos = Vector2i(int(dict["grid_position"][0]), int(dict["grid_position"][1]))
 	var recipe = dict.get("active_recipe", {}).duplicate()
-	var b = BuildingData.new(int(dict["id"]), dict["type"], pos, recipe)
+	var size = get_default_size(dict.get("type", ""))
+	
+	var b = BuildingData.new(int(dict["id"]), dict["type"], pos, recipe, size)
 	
 	b.inputs = dict.get("inputs", {}).duplicate()
 	b.input_limits = dict.get("input_limits", {}).duplicate()
@@ -138,3 +168,4 @@ static func from_dict(dict: Dictionary) -> BuildingData:
 	b.production_progress = dict.get("production_progress", 0.0)
 	b.is_producing = dict.get("is_producing", false)
 	return b
+

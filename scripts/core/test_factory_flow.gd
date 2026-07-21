@@ -27,8 +27,8 @@ func verify_resource_flow() -> void:
 	var seller_rec = { "inputs": { "iron_plate": 1.0 }, "outputs": { "credits": 5.0 }, "duration": 1.0 }
 	
 	var miner = net.add_building("miner", Vector2i(0, 0), miner_rec)
-	var smelter = net.add_building("smelter", Vector2i(0, 1), smelter_rec)
-	var seller = net.add_building("seller", Vector2i(0, 2), seller_rec)
+	var smelter = net.add_building("smelter", Vector2i(0, 4), smelter_rec)
+	var seller = net.add_building("seller", Vector2i(0, 8), seller_rec)
 	
 	net.add_connection(miner.id, smelter.id)
 	net.add_connection(smelter.id, seller.id)
@@ -63,7 +63,7 @@ func verify_portal_milestones() -> void:
 		print("[FAIL] Portal max count enforcement failed.")
 		
 	var portal = net.add_building("portal", Vector2i(5, 5), {})
-	var plate_producer = net.add_building("constructor", Vector2i(5, 4), {
+	var plate_producer = net.add_building("constructor", Vector2i(5, 0), {
 		"inputs": {},
 		"outputs": { "iron_plate": 10.0, "iron_gear": 5.0 },
 		"duration": 1.0
@@ -77,7 +77,7 @@ func verify_portal_milestones() -> void:
 		print("SIGNAL RECEIVED: Milestone Tier %d (%s) Completed!" % [tier, data["name"]])
 	)
 	
-	for t in range(25):
+	for t in range(60):
 		net.tick(1.0, res_mgr, mod_mgr, ms_mgr, art_mgr)
 	
 	var m_status2 = ms_mgr.get_current_milestone()

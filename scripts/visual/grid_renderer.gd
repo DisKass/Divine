@@ -3,7 +3,7 @@ extends Node2D
 
 ## Procedurally draws an infinite 2D grid that pans and scales with the camera.
 
-@export var cell_size: int = 64
+@export var cell_size: int = 32
 @export var grid_color: Color = Color(0.15, 0.18, 0.22, 0.4)
 @export var major_grid_color: Color = Color(0.25, 0.3, 0.35, 0.6)
 @export var axis_color: Color = Color(0.3, 0.6, 1.0, 0.4)

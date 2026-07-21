@@ -24,10 +24,22 @@ var _credits_producers: Array[BuildingData] = [] # Cache of buildings that outpu
 var _portals: Array[BuildingData] = [] # Cache of portal buildings
 var _altars: Array[BuildingData] = [] # Cache of altar buildings
 
+## Checks whether a rectangular area of cells is free of other buildings.
+func is_area_free(top_left: Vector2i, size_in_cells: Vector2i, ignore_building_id: int = 0) -> bool:
+	for x in range(size_in_cells.x):
+		for y in range(size_in_cells.y):
+			var cell = top_left + Vector2i(x, y)
+			if grid.has(cell):
+				var occ_id = grid[cell]
+				if occ_id != ignore_building_id:
+					return false
+	return true
+
 ## Adds a new building to the network.
 func add_building(type: String, pos: Vector2i, recipe: Dictionary) -> BuildingData:
-	if grid.has(pos):
-		printerr("Grid position already occupied: ", pos)
+	var default_size = BuildingData.get_default_size(type)
+	if not is_area_free(pos, default_size):
+		printerr("Grid position already occupied for area: ", pos, " size: ", default_size)
 		return null
 		
 	var b_id = next_id
@@ -35,11 +47,32 @@ func add_building(type: String, pos: Vector2i, recipe: Dictionary) -> BuildingDa
 	
 	var building = BuildingData.new(b_id, type, pos, recipe)
 	buildings[b_id] = building
-	grid[pos] = b_id
+	for cell in building.get_occupied_cells():
+		grid[cell] = b_id
 	
 	if not batch_mode:
 		rebuild_caches()
 	return building
+
+## Moves an existing building to a new position if free.
+func move_building(b_id: int, new_pos: Vector2i) -> bool:
+	if not buildings.has(b_id):
+		return false
+		
+	var building = buildings[b_id]
+	if not is_area_free(new_pos, building.size_in_cells, b_id):
+		return false
+		
+	for cell in building.get_occupied_cells():
+		grid.erase(cell)
+		
+	building.grid_position = new_pos
+	for cell in building.get_occupied_cells():
+		grid[cell] = b_id
+		
+	if not batch_mode:
+		rebuild_caches()
+	return true
 
 ## Removes a building and all its connections.
 func remove_building(b_id: int) -> void:
@@ -47,7 +80,8 @@ func remove_building(b_id: int) -> void:
 		return
 		
 	var building = buildings[b_id]
-	grid.erase(building.grid_position)
+	for cell in building.get_occupied_cells():
+		grid.erase(cell)
 	buildings.erase(b_id)
 	
 	# Remove any connections associated with this building
@@ -59,6 +93,7 @@ func remove_building(b_id: int) -> void:
 	
 	if not batch_mode:
 		rebuild_caches()
+
 
 ## Adds a connection from one building to another.
 func add_connection(from_id: int, to_id: int) -> bool:
@@ -248,7 +283,8 @@ static func from_dict(dict: Dictionary) -> FactoryNetwork:
 	for b_dict in serialized_buildings:
 		var b = BuildingData.from_dict(b_dict)
 		net.buildings[b.id] = b
-		net.grid[b.grid_position] = b.id
+		for cell in b.get_occupied_cells():
+			net.grid[cell] = b.id
 		
 	net.connections = []
 	var raw_conns = dict.get("connections", [])
@@ -260,3 +296,4 @@ static func from_dict(dict: Dictionary) -> FactoryNetwork:
 		
 	net.rebuild_caches()
 	return net
+

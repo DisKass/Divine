@@ -4,7 +4,7 @@ extends RefCounted
 ## Handles saving and loading the factory network state and economy state to/from disk.
 
 const SAVE_PATH = "user://factory_save.json"
-const SAVE_VERSION = 1
+const SAVE_VERSION = 2
 
 ## Saves the simulation state to disk, embedding a Unix timestamp and format version.
 static func save_game(network: FactoryNetwork, res_mgr: ResourceManager, build_mgr: BuildingManager, upg_mgr: UpgradesManager, art_mgr: ArtifactsManager, ms_mgr: MilestonesManager) -> bool:
@@ -59,17 +59,19 @@ static func load_game() -> Dictionary:
 		
 	# Fallback for old save format
 	var eco_dict = data.get("economy", {})
+	var net_dict = data.get("network", {})
 	
 	return {
 		"version": int(data.get("version", 0)),
 		"timestamp": int(data.get("timestamp", 0)),
-		"network_dict": data.get("network", {}),
+		"network_dict": net_dict,
 		"resource_manager_dict": data.get("resource_manager", eco_dict),
 		"building_manager_dict": data.get("building_manager", eco_dict),
 		"upgrades_manager_dict": data.get("upgrades_manager", eco_dict),
 		"artifacts_manager_dict": data.get("artifacts_manager", eco_dict),
 		"milestones_manager_dict": data.get("milestones_manager", eco_dict)
 	}
+
 
 
 ## Deletes the current save game. Useful for testing or resetting progress.

@@ -8,13 +8,14 @@ class_name MainGame
 enum MouseMode { INSPECT, BUILD, LINK, DEMOLISH }
 
 # Settings
-@export var cell_size: int = 64
+@export var cell_size: int = 32
 
 # Mode State
 var current_mode: MouseMode = MouseMode.INSPECT
 var selected_build_type: String = ""
 var selected_building_id: int = 0
 var link_source_id: int = 0
+
 
 # Core Managers
 var network: FactoryNetwork
@@ -160,10 +161,11 @@ func _process(delta: float) -> void:
 	
 	# Color red if blocked, green if empty and affordable (BUILD preview)
 	if current_mode == MouseMode.BUILD and is_instance_valid(input_controller):
-		var grid_pos = input_controller._get_grid_position_under_mouse()
+		var grid_pos = input_controller._get_build_placement_grid_pos(selected_build_type)
+		var b_size = BuildingData.get_default_size(selected_build_type)
 		var style = build_preview.get_theme_stylebox("panel") as StyleBoxFlat
 		if style:
-			if network.grid.has(grid_pos):
+			if not network.is_area_free(grid_pos, b_size):
 				style.border_color = Color(0.9, 0.25, 0.25, 0.8) # Red (blocked)
 				style.bg_color = Color(0.9, 0.25, 0.25, 0.15)
 			elif not building_manager.can_afford(selected_build_type):
@@ -193,8 +195,10 @@ func _handle_inspect(building_id: int) -> void:
 		inspector_panel.visible = false
 
 func _handle_build(grid_pos: Vector2i) -> void:
-	if network.grid.has(grid_pos):
+	var b_size = BuildingData.get_default_size(selected_build_type)
+	if not network.is_area_free(grid_pos, b_size):
 		return # Blocked
+
 		
 	if not building_manager.can_afford(selected_build_type):
 		return # Cannot afford
