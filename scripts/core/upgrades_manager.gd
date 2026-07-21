@@ -4,6 +4,7 @@ extends RefCounted
 ## Zone of Responsibility: Managing global upgrades progression and registering their bonuses with ModifierManager.
 
 signal upgrade_purchased(upgrade_id: String, level: int)
+signal upgrades_reset()
 
 var resource_manager: ResourceManager
 var modifier_manager: ModifierManager
@@ -15,6 +16,14 @@ func _init(res_mgr: ResourceManager, mod_mgr: ModifierManager) -> void:
 	resource_manager = res_mgr
 	modifier_manager = mod_mgr
 	_load_configs()
+
+## Resets all purchased upgrades back to level 0 and clears their modifiers.
+func reset_upgrades() -> void:
+	for id in upgrade_configs.keys():
+		modifier_manager.clear_source("upgrades_" + id)
+	upgrades.clear()
+	rebuild_modifiers()
+	upgrades_reset.emit()
 
 func _load_configs() -> void:
 	var types = ["miner_speed", "factory_speed", "logistics_transfer"]

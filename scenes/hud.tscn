@@ -67,9 +67,9 @@ text = "Upgrades Shop 🛒"
 layout_mode = 2
 text = "Artifacts 💍"
 
-[node name="ResetBtn" type="Button" parent="TopPanel/HBoxContainer"]
+[node name="GDBtn" type="Button" parent="TopPanel/HBoxContainer"]
 layout_mode = 2
-text = "Reset Game"
+text = "🛠 ГД"
 
 [node name="Margin2" type="Control" parent="TopPanel/HBoxContainer"]
 custom_minimum_size = Vector2(10, 0)

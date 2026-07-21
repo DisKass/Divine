@@ -43,6 +43,7 @@ var input_controller: InputController
 # UI References (Instantiated from scenes)
 var hud: HUD
 var inspector_panel: InspectorPanel
+var gd_panel: GDPanel
 var popup_dialog: AcceptDialog
 
 # Default recipes for placing buildings, populated dynamically from Recipes database
@@ -99,6 +100,14 @@ func _ready() -> void:
 	
 	# 4. Load or Init Core Simulation
 	_initialize_game()
+	
+	# 5. Setup GD Debug Panel
+	gd_panel = GDPanel.new()
+	hud.add_child(gd_panel)
+	hud.gd_panel = gd_panel
+	gd_panel.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	gd_panel.visible = false
+	gd_panel.setup(milestones_manager, upgrades_manager, self)
 	
 	# Connect to tick signal to update UI
 	ticker.tick_completed.connect(_on_simulation_tick)

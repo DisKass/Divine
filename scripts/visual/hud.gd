@@ -11,12 +11,13 @@ signal reset_game_pressed
 @onready var stats_menu: MenuButton = $TopPanel/HBoxContainer/StatsMenu
 @onready var shop_btn: Button = $TopPanel/HBoxContainer/ShopBtn
 @onready var artifacts_btn: Button = $TopPanel/HBoxContainer/ArtifactsBtn
-@onready var reset_btn: Button = $TopPanel/HBoxContainer/ResetBtn
+@onready var gd_btn: Button = $TopPanel/HBoxContainer/GDBtn
 @onready var build_tools_hbox: HBoxContainer = $BottomPanel/MarginContainer/ScrollContainer/BuildToolsHBox
 @onready var scroll_container: ScrollContainer = $BottomPanel/MarginContainer/ScrollContainer
 
 var shop_panel: ShopPanel
 var artifacts_panel: ArtifactsPanel
+var gd_panel: GDPanel
 var tool_buttons: Dictionary = {}
 var tool_cost_labels: Dictionary = {}
 
@@ -62,7 +63,10 @@ func _ready() -> void:
 			artifacts_panel.update_panel()
 	)
 	
-	reset_btn.pressed.connect(func(): reset_game_pressed.emit())
+	gd_btn.pressed.connect(func():
+		if is_instance_valid(gd_panel):
+			gd_panel.visible = not gd_panel.visible
+	)
 	
 	scroll_container.gui_input.connect(_on_scroll_gui_input)
 	_create_build_buttons()

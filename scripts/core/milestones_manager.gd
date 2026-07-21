@@ -4,6 +4,7 @@ extends RefCounted
 ## Zone of Responsibility: Tracking milestone completion, managing portal deliveries, and determining current game tier.
 
 signal milestone_completed(tier: int, milestone_data: Dictionary)
+signal milestone_reset()
 
 var current_milestone_index: int = 0
 var milestone_progress: Dictionary = {}
@@ -12,6 +13,12 @@ var milestones: Array[MilestoneData] = []
 
 func _init() -> void:
 	_load_configs()
+
+## Resets milestone progression back to Tier 1.
+func reset_milestone_progress() -> void:
+	current_milestone_index = 0
+	milestone_progress.clear()
+	milestone_reset.emit()
 
 func _load_configs() -> void:
 	for i in range(1, 4): # Tiers 1-3

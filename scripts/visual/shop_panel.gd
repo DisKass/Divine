@@ -27,6 +27,8 @@ func setup_new(p_res_mgr: ResourceManager, p_upg_mgr: UpgradesManager) -> void:
 		
 	if not upg_mgr.upgrade_purchased.is_connected(_on_upgrade_purchased):
 		upg_mgr.upgrade_purchased.connect(_on_upgrade_purchased)
+	if not upg_mgr.upgrades_reset.is_connected(update_shop):
+		upg_mgr.upgrades_reset.connect(update_shop)
 
 func _build_cards() -> void:
 	for up_id in upg_mgr.upgrade_configs:
