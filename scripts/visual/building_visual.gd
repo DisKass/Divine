@@ -19,6 +19,14 @@ var outputs_container: VBoxContainer
 # Styling Colors based on building type
 var accent_color: Color = Color.WHITE
 
+var port_flash_timers: Array[float] = [0.0, 0.0, 0.0]
+
+func trigger_output_pulse(port_idx: int) -> void:
+	while port_flash_timers.size() <= port_idx:
+		port_flash_timers.append(0.0)
+	port_flash_timers[port_idx] = 0.35
+	request_overlay_redraw()
+
 func setup(p_data: BuildingData, p_cell_size: int) -> void:
 	data = p_data
 	cell_size = p_cell_size
@@ -56,20 +64,70 @@ func setup(p_data: BuildingData, p_cell_size: int) -> void:
 	_update_ui()
 
 func _draw() -> void:
-	if data == null:
+	pass # Drawing is handled by Overlay Control on top of panel background
+
+func _to_overlay_local(overlay: Control, global_pos: Vector2) -> Vector2:
+	return overlay.get_global_transform().affine_inverse() * global_pos
+
+func _on_overlay_draw() -> void:
+	if data == null or not is_instance_valid(panel):
 		return
+		
+	var overlay = panel.get_node_or_null("Overlay") as Control
+	if overlay == null:
+		return
+		
+	# Minimalist visual representation for splitters (internal lines + flashing + next target highlight)
+	if data.type.begins_with("splitter"):
+		var in_pt = _to_overlay_local(overlay, get_port_global_position(false, 0))
+		var out_count = BuildingData.get_output_ports_count(data.type)
+		var next_target_idx = (data.last_outgoing_conn_index % max(1, out_count)) if data != null else 0
+		
+		for i in range(out_count):
+			var out_pt = _to_overlay_local(overlay, get_port_global_position(true, i))
+			var is_flashing = (i < port_flash_timers.size() and port_flash_timers[i] > 0.0)
+			var is_next = (i == next_target_idx)
+			
+			if is_flashing:
+				var alpha = minf(1.0, port_flash_timers[i] / 0.15)
+				# Wide outer glow
+				overlay.draw_line(in_pt, out_pt, Color(1.0, 0.85, 0.2, alpha * 0.7), 6.0)
+				# Core bright line
+				overlay.draw_line(in_pt, out_pt, Color(1.0, 1.0, 0.7, alpha), 3.0)
+				overlay.draw_circle(out_pt, 5.5, Color(1.0, 0.9, 0.3, 1.0))
+				overlay.draw_arc(out_pt, 5.5, 0, TAU, 16, Color.BLACK, 1.5)
+			elif is_next:
+				# Highlighted next target line (width 3.0, alpha 0.4)
+				overlay.draw_line(in_pt, out_pt, Color(0.9, 0.8, 0.35, 0.4), 3.0)
+				overlay.draw_circle(out_pt, 5.0, Color(0.9, 0.8, 0.35, 0.65))
+				overlay.draw_arc(out_pt, 5.0, 0, TAU, 16, Color.BLACK, 1.5)
+			else:
+				# Neutral grey inactive line
+				overlay.draw_line(in_pt, out_pt, Color(0.3, 0.35, 0.4, 0.4), 1.5)
+				overlay.draw_circle(out_pt, 4.5, Color(0.6, 0.65, 0.7, 0.6))
+				overlay.draw_arc(out_pt, 4.5, 0, TAU, 16, Color.BLACK, 1.2)
+			
+		overlay.draw_circle(in_pt, 5.0, Color(0.3, 0.7, 1.0, 0.9)) # Blue input dot
+		overlay.draw_arc(in_pt, 5.0, 0, TAU, 16, Color.BLACK, 1.5)
+		return
+
 	var recipe_ctx = {"inputs": data.inputs, "outputs": data.outputs}
 	var out_count = BuildingData.get_output_ports_count(data.type, recipe_ctx)
 	for i in range(out_count):
-		var pt = to_local(get_port_global_position(true, i))
-		draw_circle(pt, 5.0, Color(1.0, 0.85, 0.2, 0.9)) # Orange/Yellow output dot
-		draw_arc(pt, 5.0, 0, TAU, 16, Color.BLACK, 1.5)
+		var pt = _to_overlay_local(overlay, get_port_global_position(true, i))
+		overlay.draw_circle(pt, 5.0, Color(1.0, 0.85, 0.2, 0.9)) # Orange/Yellow output dot
+		overlay.draw_arc(pt, 5.0, 0, TAU, 16, Color.BLACK, 1.5)
 		
 	var in_count = BuildingData.get_input_ports_count(data.type, recipe_ctx)
 	for i in range(in_count):
-		var pt = to_local(get_port_global_position(false, i))
-		draw_circle(pt, 5.0, Color(0.3, 0.7, 1.0, 0.9)) # Blue input dot
-		draw_arc(pt, 5.0, 0, TAU, 16, Color.BLACK, 1.5)
+		var pt = _to_overlay_local(overlay, get_port_global_position(false, i))
+		overlay.draw_circle(pt, 5.0, Color(0.3, 0.7, 1.0, 0.9)) # Blue input dot
+		overlay.draw_arc(pt, 5.0, 0, TAU, 16, Color.BLACK, 1.5)
+
+func request_overlay_redraw() -> void:
+	queue_redraw()
+	if is_instance_valid(panel) and panel.has_node("Overlay"):
+		(panel.get_node("Overlay") as Control).queue_redraw()
 
 func _create_ui() -> void:
 	var size_px = Vector2(data.size_in_cells * cell_size)
@@ -159,6 +217,22 @@ func _create_ui() -> void:
 	outputs_container.add_theme_constant_override("separation", 1)
 	vbox.add_child(outputs_container)
 	
+	# Minimalist mode for splitters: hide header and resource lists
+	if data.type.begins_with("splitter"):
+		title_label.visible = false
+		progress_bar.visible = false
+		sep.visible = false
+		inputs_container.visible = false
+		outputs_container.visible = false
+	
+	# Create Overlay Control inside panel to draw internal lines & ports on top of panel background
+	var overlay = Control.new()
+	overlay.name = "Overlay"
+	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	panel.add_child(overlay)
+	overlay.draw.connect(_on_overlay_draw)
+
 	add_child(panel)
 	_set_mouse_ignore(panel)
 
@@ -168,11 +242,17 @@ func _set_mouse_ignore(node: Node) -> void:
 	for child in node.get_children():
 		_set_mouse_ignore(child)
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	if data == null:
 		return
 	_update_ui()
-	queue_redraw()
+	var needs_redraw = false
+	for i in range(port_flash_timers.size()):
+		if port_flash_timers[i] > 0.0:
+			port_flash_timers[i] = maxf(0.0, port_flash_timers[i] - delta)
+			needs_redraw = true
+	if needs_redraw:
+		request_overlay_redraw()
 
 func _update_ui() -> void:
 	# Update panel dimensions if size_in_cells changed
@@ -183,7 +263,7 @@ func _update_ui() -> void:
 		position = Vector2(data.grid_position) * cell_size + size_px / 2.0
 
 	# Update progress bar
-	if data.type == "portal" or data.active_recipe.is_empty():
+	if data.type.begins_with("splitter") or data.type == "portal" or data.active_recipe.is_empty():
 		progress_bar.visible = false
 	else:
 		progress_bar.visible = true
@@ -291,6 +371,19 @@ func get_port_global_position(is_output: bool, port_idx: int) -> Vector2:
 		
 	var half_width = data.size_in_cells.x * cell_size / 2.0
 	var half_height = data.size_in_cells.y * cell_size / 2.0
+	
+	if data.type.begins_with("splitter"):
+		if not is_output:
+			return Vector2(global_position.x - half_width, global_position.y)
+		else:
+			var total_ports = BuildingData.get_output_ports_count(data.type)
+			port_idx = clamp(port_idx, 0, total_ports - 1)
+			if total_ports <= 2:
+				var offset_y = -half_height * 0.45 if port_idx == 0 else half_height * 0.45
+				return Vector2(global_position.x + half_width, global_position.y + offset_y)
+			else:
+				var offsets = [-half_height * 0.55, 0.0, half_height * 0.55]
+				return Vector2(global_position.x + half_width, global_position.y + offsets[port_idx])
 	
 	var recipe_ctx = {"inputs": data.inputs, "outputs": data.outputs}
 	var in_count = BuildingData.get_input_ports_count(data.type, recipe_ctx)

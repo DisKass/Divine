@@ -17,6 +17,8 @@ class ResourcePacket:
 	var progress: float = 0.0 # Center position in pixels along travel path
 	var max_travel_dist: float = 0.0
 	var speed: float = 1.0
+	var delay: float = 0.0
+	var has_triggered_pulse: bool = false
 
 var network: FactoryNetwork
 var visuals_map: Dictionary = {} # building_id -> BuildingVisual
@@ -45,6 +47,14 @@ func _on_resource_transferred(from_id: int, from_port: int, to_id: int, to_port:
 	if dist < 1.0:
 		return
 		
+	# Calculate delay if an incoming packet to from_id is currently traveling
+	var initial_delay = 0.0
+	for p in active_packets:
+		if p.to_id == from_id:
+			var rem_dist = maxf(0.0, p.max_travel_dist - p.progress)
+			var rem_time = rem_dist / p.speed if p.speed > 0.0 else 0.0
+			initial_delay = maxf(initial_delay, rem_time + p.delay)
+			
 	var half_len = packet_length * 0.5
 	var packet = ResourcePacket.new()
 	packet.from_id = from_id
@@ -55,12 +65,31 @@ func _on_resource_transferred(from_id: int, from_port: int, to_id: int, to_port:
 	packet.progress = -half_len
 	packet.max_travel_dist = dist + half_len
 	packet.speed = (dist + packet_length) * maxf(transfer_rate, 0.1)
+	packet.delay = initial_delay
+	
+	if initial_delay <= 0.0:
+		packet.has_triggered_pulse = true
+		if is_instance_valid(from_vis) and from_vis.has_method("trigger_output_pulse"):
+			from_vis.trigger_output_pulse(from_port)
+			
 	active_packets.append(packet)
 
 func _process(delta: float) -> void:
 	var i = 0
 	while i < active_packets.size():
 		var pkt = active_packets[i]
+		if pkt.delay > 0.0:
+			pkt.delay -= delta
+			if pkt.delay <= 0.0:
+				pkt.delay = 0.0
+				if not pkt.has_triggered_pulse:
+					pkt.has_triggered_pulse = true
+					var from_vis: BuildingVisual = visuals_map.get(pkt.from_id)
+					if is_instance_valid(from_vis) and from_vis.has_method("trigger_output_pulse"):
+						from_vis.trigger_output_pulse(pkt.from_port)
+			i += 1
+			continue
+			
 		pkt.progress += pkt.speed * delta
 		if pkt.progress >= pkt.max_travel_dist:
 			active_packets.remove_at(i)
@@ -93,6 +122,8 @@ func _draw() -> void:
 		
 	# 2. Draw flying elongated resource segments
 	for pkt in active_packets:
+		if pkt.delay > 0.0:
+			continue
 		var from_vis: BuildingVisual = visuals_map.get(pkt.from_id)
 		var to_vis: BuildingVisual = visuals_map.get(pkt.to_id)
 		

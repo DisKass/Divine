@@ -114,7 +114,7 @@ func add_connection(from_id: int, to_id: int, from_port: int = 0, to_port: int =
 		has_matching_resource = true
 		for out_res in from_b.outputs:
 			to_b.inputs[out_res] = to_b.inputs.get(out_res, 0.0)
-			to_b.input_limits[out_res] = 9999.0 if to_b.type == "portal" else maxf(to_b.input_limits.get(out_res, 20.0), 20.0)
+			to_b.input_limits[out_res] = 9999.0 if to_b.type == "portal" else (1.0 if to_b.type.begins_with("splitter") else maxf(to_b.input_limits.get(out_res, 20.0), 20.0))
 	else:
 		for out_res in from_b.outputs:
 			if to_b.inputs.has(out_res) or to_b.active_recipe.get("inputs", {}).has(out_res):
@@ -266,7 +266,7 @@ func tick(delta: float = 1.0, resource_mgr: ResourceManager = null, modifier_mgr
 							resources.append(res)
 					else:
 						to_b.inputs[res] = to_b.inputs.get(res, 0.0)
-						to_b.input_limits[res] = maxf(to_b.input_limits.get(res, 20.0), 20.0)
+						to_b.input_limits[res] = 1.0 if to_b.type.begins_with("splitter") else maxf(to_b.input_limits.get(res, 20.0), 20.0)
 						resources.append(res)
 			elif from_b.type.begins_with("splitter"):
 				for res in from_b.outputs.keys():
@@ -301,6 +301,8 @@ func tick(delta: float = 1.0, resource_mgr: ResourceManager = null, modifier_mgr
 						continue
 						
 					var target_current = to_b.inputs.get(res, 0.0)
+					if to_b.type.begins_with("splitter"):
+						target_current += to_b.outputs.get(res, 0.0)
 					var target_limit = to_b.input_limits.get(res, 20.0)
 					var space_units = floori(target_limit - target_current)
 					

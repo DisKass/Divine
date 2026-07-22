@@ -13,8 +13,8 @@ const DEFAULT_SIZES: Dictionary = {
 	"infuser": Vector2i(4, 3),
 	"portal": Vector2i(4, 3),
 	"seller": Vector2i(4, 2),
-	"splitter_2": Vector2i(3, 3),
-	"splitter_3": Vector2i(3, 3),
+	"splitter_2": Vector2i(1, 2),
+	"splitter_3": Vector2i(1, 2),
 	# Backwards compatibility
 	"miner_iron": Vector2i(3, 2),
 	"miner_coal": Vector2i(3, 2),
@@ -26,8 +26,11 @@ const DEFAULT_SIZES: Dictionary = {
 }
 
 static func get_default_size(p_type: String, p_recipe: Dictionary = {}) -> Vector2i:
+	if p_type.begins_with("splitter"):
+		return Vector2i(1, 2)
+		
 	var width = 4
-	if p_type.begins_with("miner") or p_type.begins_with("splitter"):
+	if p_type.begins_with("miner"):
 		width = 3
 		
 	var in_count = get_input_ports_count(p_type, p_recipe)
@@ -151,9 +154,14 @@ func tick(delta: float = 1.0, speed_multiplier: float = 1.0) -> void:
 		for res in inputs.keys():
 			var amt = inputs[res]
 			if amt > 0.0:
-				outputs[res] = outputs.get(res, 0.0) + amt
-				output_limits[res] = maxf(output_limits.get(res, 20.0), 20.0)
-				inputs[res] = 0.0
+				var current_out = outputs.get(res, 0.0)
+				var space = maxf(0.0, 1.0 - current_out)
+				var to_transfer = minf(amt, space)
+				if to_transfer > 0.0:
+					outputs[res] = current_out + to_transfer
+					inputs[res] -= to_transfer
+				output_limits[res] = 1.0
+				input_limits[res] = 1.0
 		return
 
 	if active_recipe.is_empty():

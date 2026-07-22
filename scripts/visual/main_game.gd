@@ -484,10 +484,5 @@ func _on_reset_pressed() -> void:
 	upgrades_manager = UpgradesManager.new(resource_manager, modifier_manager)
 	ticker = SimulationTicker.new(network, resource_manager, modifier_manager, milestones_manager, artifacts_manager)
 	ticker.tick_completed.connect(_on_simulation_tick)
-	
-	connection_renderer.setup(network, visuals_map)
-	if is_instance_valid(input_controller):
-		input_controller.setup(camera, network, visuals_map, build_preview)
-		
 	_set_mouse_mode(MouseMode.INSPECT)
 	_update_ui()
