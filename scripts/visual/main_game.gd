@@ -181,7 +181,8 @@ func _process(delta: float) -> void:
 	# Color red if blocked, green if empty and affordable (BUILD preview)
 	if current_mode == MouseMode.BUILD and is_instance_valid(input_controller):
 		var grid_pos = input_controller._get_build_placement_grid_pos(selected_build_type)
-		var b_size = BuildingData.get_default_size(selected_build_type)
+		var default_rec = default_recipes.get(selected_build_type, {})
+		var b_size = BuildingData.get_default_size(selected_build_type, default_rec)
 		var style = build_preview.get_theme_stylebox("panel") as StyleBoxFlat
 		if style:
 			if not network.is_area_free(grid_pos, b_size):
@@ -214,7 +215,8 @@ func _handle_inspect(building_id: int) -> void:
 		inspector_panel.visible = false
 
 func _handle_build(grid_pos: Vector2i) -> void:
-	var b_size = BuildingData.get_default_size(selected_build_type)
+	var default_rec = default_recipes.get(selected_build_type, {})
+	var b_size = BuildingData.get_default_size(selected_build_type, default_rec)
 	if not network.is_area_free(grid_pos, b_size):
 		return # Blocked
 
@@ -224,7 +226,6 @@ func _handle_build(grid_pos: Vector2i) -> void:
 		
 	# Process purchase
 	if building_manager.buy_building(selected_build_type):
-		var default_rec = default_recipes.get(selected_build_type, {})
 		var recipe = default_rec.duplicate(true) if not default_rec.is_empty() else {}
 		var b_data = network.add_building(selected_build_type, grid_pos, recipe)
 		if selected_build_type == "portal":

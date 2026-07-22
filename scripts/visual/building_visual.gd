@@ -92,6 +92,10 @@ func _create_ui() -> void:
 	style.corner_radius_bottom_right = 6
 	style.shadow_color = Color(0, 0, 0, 0.3)
 	style.shadow_size = 4
+	style.content_margin_left = 4
+	style.content_margin_right = 4
+	style.content_margin_top = 2
+	style.content_margin_bottom = 5 # 2px border + 3px bottom padding
 	panel.add_theme_stylebox_override("panel", style)
 	
 	# Mouse filter to let MainGame handle selection clicks
@@ -143,20 +147,17 @@ func _create_ui() -> void:
 	sep.color = Color(0.2, 0.25, 0.3, 0.3)
 	vbox.add_child(sep)
 	
-	# ScrollContainer for buffers (optional, here we just use VBox)
-	var buffers_hbox = HBoxContainer.new()
-	buffers_hbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	vbox.add_child(buffers_hbox)
-	
-	# Left: Inputs list
+	# Top: Inputs list (Sequential vertical)
 	inputs_container = VBoxContainer.new()
 	inputs_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	buffers_hbox.add_child(inputs_container)
+	inputs_container.add_theme_constant_override("separation", 1)
+	vbox.add_child(inputs_container)
 	
-	# Right: Outputs list
+	# Bottom: Outputs list (Sequential vertical)
 	outputs_container = VBoxContainer.new()
 	outputs_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	buffers_hbox.add_child(outputs_container)
+	outputs_container.add_theme_constant_override("separation", 1)
+	vbox.add_child(outputs_container)
 	
 	add_child(panel)
 	_set_mouse_ignore(panel)
@@ -174,6 +175,13 @@ func _process(_delta: float) -> void:
 	queue_redraw()
 
 func _update_ui() -> void:
+	# Update panel dimensions if size_in_cells changed
+	var size_px = Vector2(data.size_in_cells * cell_size)
+	if panel.custom_minimum_size != size_px:
+		panel.custom_minimum_size = size_px
+		panel.position = -size_px / 2.0
+		position = Vector2(data.grid_position) * cell_size + size_px / 2.0
+
 	# Update progress bar
 	if data.type == "portal" or data.active_recipe.is_empty():
 		progress_bar.visible = false
@@ -285,7 +293,9 @@ func get_port_global_position(is_output: bool, port_idx: int) -> Vector2:
 	var half_height = data.size_in_cells.y * cell_size / 2.0
 	
 	var recipe_ctx = {"inputs": data.inputs, "outputs": data.outputs}
-	var total_ports = BuildingData.get_output_ports_count(data.type, recipe_ctx) if is_output else BuildingData.get_input_ports_count(data.type, recipe_ctx)
+	var in_count = BuildingData.get_input_ports_count(data.type, recipe_ctx)
+	var out_count = BuildingData.get_output_ports_count(data.type, recipe_ctx)
+	var total_ports = out_count if is_output else in_count
 	if total_ports <= 0:
 		return global_position
 		
@@ -300,15 +310,18 @@ func get_port_global_position(is_output: bool, port_idx: int) -> Vector2:
 			var port_y = child.global_position.y + child.size.y / 2.0
 			return Vector2(global_position.x + side_x, port_y)
 			
-	# Otherwise (for splitters or empty lists), evenly space ports across lower resource area
-	var start_y = global_position.y - half_height * 0.2
-	var end_y = global_position.y + half_height * 0.7
-	if total_ports == 1:
-		return Vector2(global_position.x + side_x, (start_y + end_y) / 2.0)
+	# Otherwise (splitters or empty lists), calculate position mathematically based on sequential entry slots
+	var header_height = float(cell_size) # 1 grid cell for header
+	var start_y = global_position.y - half_height + header_height
+	var end_y = global_position.y + half_height - 3.0 # 3px bottom padding
+	
+	var total_entries = in_count + out_count
+	if total_entries <= 0:
+		return Vector2(global_position.x + side_x, global_position.y)
 		
-	var area_height = end_y - start_y
-	var step = area_height / float(total_ports)
-	var port_y = start_y + (float(port_idx) + 0.5) * step
+	var entry_idx = (in_count + port_idx) if is_output else port_idx
+	var step = (end_y - start_y) / float(total_entries)
+	var port_y = start_y + (float(entry_idx) + 0.5) * step
 	return Vector2(global_position.x + side_x, port_y)
 
 ## Determines output sub-port index based on mouse click global position.

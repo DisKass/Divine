@@ -6,27 +6,38 @@ extends RefCounted
 
 const DEFAULT_SIZES: Dictionary = {
 	"miner": Vector2i(3, 2),
-	"smelter": Vector2i(5, 3),
-	"converter": Vector2i(5, 3),
-	"assembler": Vector2i(5, 3),
-	"extractor": Vector2i(5, 3),
-	"infuser": Vector2i(5, 3),
-	"portal": Vector2i(5, 4),
-	"seller": Vector2i(5, 3),
+	"smelter": Vector2i(4, 2),
+	"converter": Vector2i(4, 2),
+	"assembler": Vector2i(4, 3),
+	"extractor": Vector2i(4, 2),
+	"infuser": Vector2i(4, 3),
+	"portal": Vector2i(4, 3),
+	"seller": Vector2i(4, 2),
 	"splitter_2": Vector2i(3, 3),
-	"splitter_3": Vector2i(3, 4),
+	"splitter_3": Vector2i(3, 3),
 	# Backwards compatibility
 	"miner_iron": Vector2i(3, 2),
 	"miner_coal": Vector2i(3, 2),
 	"miner_crystal": Vector2i(3, 2),
-	"crusher": Vector2i(5, 3),
-	"constructor": Vector2i(5, 3),
-	"alchemy_lab": Vector2i(5, 3),
-	"artifact_altar": Vector2i(5, 4)
+	"crusher": Vector2i(4, 2),
+	"constructor": Vector2i(4, 2),
+	"alchemy_lab": Vector2i(4, 3),
+	"artifact_altar": Vector2i(4, 3)
 }
 
-static func get_default_size(p_type: String) -> Vector2i:
-	return DEFAULT_SIZES.get(p_type, Vector2i(5, 3))
+static func get_default_size(p_type: String, p_recipe: Dictionary = {}) -> Vector2i:
+	var width = 4
+	if p_type.begins_with("miner") or p_type.begins_with("splitter"):
+		width = 3
+		
+	var in_count = get_input_ports_count(p_type, p_recipe)
+	var out_count = get_output_ports_count(p_type, p_recipe)
+	var total_entries = in_count + out_count
+	
+	var resource_cells = int(ceil(float(max(1, total_entries)) / 2.0))
+	var height = 1 + resource_cells
+	
+	return Vector2i(width, height)
 
 static func get_output_ports_count(p_type: String, p_recipe: Dictionary = {}) -> int:
 	match p_type:
@@ -87,7 +98,7 @@ func _init(p_id: int, p_type: String, p_pos: Vector2i, p_recipe: Dictionary = {}
 	type = p_type
 	grid_position = p_pos
 	active_recipe = p_recipe
-	size_in_cells = p_size if p_size != Vector2i.ZERO else get_default_size(p_type)
+	size_in_cells = p_size if p_size != Vector2i.ZERO else get_default_size(p_type, p_recipe)
 	
 	# Initialize buffers from recipe if present
 	if not active_recipe.is_empty():
@@ -114,6 +125,7 @@ func get_occupied_cells() -> Array[Vector2i]:
 ## Changes the active recipe of the building, resetting production progress and buffers.
 func set_recipe(p_recipe: Dictionary) -> void:
 	active_recipe = p_recipe.duplicate(true)
+	size_in_cells = get_default_size(type, active_recipe)
 	production_progress = 0.0
 	is_producing = false
 	
@@ -205,7 +217,7 @@ func to_dict() -> Dictionary:
 static func from_dict(dict: Dictionary) -> BuildingData:
 	var pos = Vector2i(int(dict["grid_position"][0]), int(dict["grid_position"][1]))
 	var recipe = dict.get("active_recipe", {}).duplicate()
-	var size = get_default_size(dict.get("type", ""))
+	var size = get_default_size(dict.get("type", ""), recipe)
 	
 	var b = BuildingData.new(int(dict["id"]), dict["type"], pos, recipe, size)
 	

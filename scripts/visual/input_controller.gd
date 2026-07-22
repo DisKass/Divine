@@ -42,7 +42,8 @@ func _process(_delta: float) -> void:
 	# Process building preview positioning in BUILD mode (centered under mouse cursor)
 	if current_mode == 1 and is_instance_valid(build_preview): # MouseMode.BUILD
 		var grid_pos = _get_build_placement_grid_pos(selected_build_type)
-		var b_size = BuildingData.get_default_size(selected_build_type)
+		var default_rec = Recipes.DATA.get(selected_build_type, [{}])[0] if Recipes.DATA.has(selected_build_type) else {}
+		var b_size = BuildingData.get_default_size(selected_build_type, default_rec)
 		build_preview.custom_minimum_size = Vector2(b_size * cell_size)
 		build_preview.global_position = Vector2(grid_pos) * cell_size
 		
@@ -192,7 +193,8 @@ func _get_grid_position_under_mouse() -> Vector2i:
 ## Calculates top-left grid cell for build preview so that cursor stays at center of building.
 func _get_build_placement_grid_pos(b_type: String) -> Vector2i:
 	var m_pos = get_global_mouse_position()
-	var b_size = BuildingData.get_default_size(b_type)
+	var default_rec = Recipes.DATA.get(b_type, [{}])[0] if Recipes.DATA.has(b_type) else {}
+	var b_size = BuildingData.get_default_size(b_type, default_rec)
 	var size_px = Vector2(b_size * cell_size)
 	var top_left_world = m_pos - size_px / 2.0
 	return Vector2i(

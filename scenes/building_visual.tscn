@@ -1,6 +1,6 @@
-[gd_scene load_steps=2 format=3 uid="uid://be5eef0db87ff"]
+[gd_scene format=3 uid="uid://be5eef0db87ff"]
 
-[ext_resource type="Script" path="res://scripts/visual/building_visual.gd" id="1_visual"]
+[ext_resource type="Script" uid="uid://cteja337nq23x" path="res://scripts/visual/building_visual.gd" id="1_visual"]
 
-[node name="BuildingVisual" type="Node2D"]
+[node name="BuildingVisual" type="Node2D" unique_id=1089823100]
 script = ExtResource("1_visual")
