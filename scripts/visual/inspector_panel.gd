@@ -16,9 +16,14 @@ func _ready() -> void:
 	recipe_container.visible = false
 	recipe_button.item_selected.connect(_on_recipe_selected)
 
+var _inspected_building_id: int = -1
+var _inspected_recipe_id: String = ""
+
 func update_inspector_new(b_data: BuildingData, build_mgr: BuildingManager) -> void:
 	if b_data == null:
 		visible = false
+		_inspected_building_id = -1
+		_inspected_recipe_id = ""
 		return
 		
 	visible = true
@@ -28,8 +33,8 @@ func update_inspector_new(b_data: BuildingData, build_mgr: BuildingManager) -> v
 	text += "Grid Position: %s\n" % str(b_data.grid_position)
 	text += "-------------------------\n"
 	
-	if b_data.type == "portal" and build_mgr != null:
-		var m_info = build_mgr.milestones.get_current_milestone()
+	if b_data.type == "portal" and build_mgr != null and build_mgr.milestones_manager != null:
+		var m_info = build_mgr.milestones_manager.get_current_milestone()
 		if m_info.get("completed_all", false):
 			text += "Milestone Status:\n  All Tiers Completed! 🏆\n"
 		else:
@@ -52,32 +57,40 @@ func update_inspector_new(b_data: BuildingData, build_mgr: BuildingManager) -> v
 		text += "-------------------------\n"
 		text += "Inputs:\n"
 		for res in b_data.inputs:
-			text += "  - %s: %d / %d\n" % [res, int(round(b_data.inputs[res])), int(round(b_data.input_limits.get(res, 20.0)))]
+			if not res.begins_with("_"):
+				text += "  - %s: %d / %d\n" % [res, int(round(b_data.inputs[res])), int(round(b_data.input_limits.get(res, 20.0)))]
 			
 		text += "Outputs:\n"
 		for res in b_data.outputs:
-			text += "  - %s: %d / %d\n" % [res, int(round(b_data.outputs[res])), int(round(b_data.output_limits.get(res, 20.0)))]
+			if not res.begins_with("_"):
+				text += "  - %s: %d / %d\n" % [res, int(round(b_data.outputs[res])), int(round(b_data.output_limits.get(res, 20.0)))]
 		
 	inspector_details.text = text
 
+	var active_recipe_id = b_data.active_recipe.get("id", "")
 	var possible_recipes = Recipes.DATA.get(b_data.type, [])
 	if possible_recipes.size() > 1:
 		recipe_container.visible = true
-		recipe_button.clear()
-		
-		var active_recipe_id = b_data.active_recipe.get("id", "")
-		var select_idx = 0
-		for i in range(possible_recipes.size()):
-			var recipe = possible_recipes[i]
-			recipe_button.add_item(recipe.get("name", recipe.get("id", "Unknown")))
-			if recipe.get("id", "") == active_recipe_id:
-				select_idx = i
-				
-		recipe_button.item_selected.disconnect(_on_recipe_selected)
-		recipe_button.selected = select_idx
-		recipe_button.item_selected.connect(_on_recipe_selected)
+		if b_data.id != _inspected_building_id or active_recipe_id != _inspected_recipe_id:
+			_inspected_building_id = b_data.id
+			_inspected_recipe_id = active_recipe_id
+			
+			recipe_button.clear()
+			var select_idx = 0
+			for i in range(possible_recipes.size()):
+				var recipe = possible_recipes[i]
+				recipe_button.add_item(recipe.get("name", recipe.get("id", "Unknown")))
+				if recipe.get("id", "") == active_recipe_id:
+					select_idx = i
+					
+			if recipe_button.item_selected.is_connected(_on_recipe_selected):
+				recipe_button.item_selected.disconnect(_on_recipe_selected)
+			recipe_button.selected = select_idx
+			recipe_button.item_selected.connect(_on_recipe_selected)
 	else:
 		recipe_container.visible = false
+		_inspected_building_id = b_data.id
+		_inspected_recipe_id = active_recipe_id
 
 func _on_recipe_selected(idx: int) -> void:
 	recipe_selected.emit(idx)

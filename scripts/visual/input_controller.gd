@@ -4,7 +4,7 @@ class_name InputController
 ## Component dedicated to handling mouse click/drag actions on the factory grid.
 
 signal building_clicked(building_id: int)
-signal building_right_clicked(building_id: int)
+signal building_right_clicked(building_id: int, port_index: int)
 signal empty_space_clicked(grid_pos: Vector2i)
 signal building_move_completed
 signal link_mode_cancelled
@@ -20,6 +20,7 @@ var build_preview: PanelContainer
 var current_mode: int = 0 # 0 = INSPECT, 1 = BUILD, 2 = LINK, 3 = DEMOLISH
 var selected_build_type: String = ""
 var link_source_id: int = 0
+var link_source_port: int = 0
 
 # Drag & Panning internal state
 var _is_dragging_building: bool = false
@@ -63,7 +64,7 @@ func _draw() -> void:
 	if current_mode == 2 and link_source_id != 0: # MouseMode.LINK
 		var source_vis = visuals_map.get(link_source_id)
 		if is_instance_valid(source_vis):
-			var start_pt = source_vis.global_position
+			var start_pt = source_vis.get_port_global_position(true, link_source_port) if source_vis.has_method("get_port_global_position") else source_vis.global_position
 			var end_pt = get_global_mouse_position()
 			draw_line(start_pt, end_pt, Color(1.0, 0.9, 0.3, 0.8), 2.0)
 
@@ -139,8 +140,12 @@ func _unhandled_input(event: InputEvent) -> void:
 		elif event.button_index == MOUSE_BUTTON_RIGHT:
 			if event.pressed:
 				if building_id != 0:
-					# RMB on building starts linking
-					building_right_clicked.emit(building_id)
+					# RMB on building starts linking from specific sub-port
+					var visual = visuals_map.get(building_id)
+					var port_idx = 0
+					if is_instance_valid(visual) and visual.has_method("get_output_port_at_position"):
+						port_idx = visual.get_output_port_at_position(get_global_mouse_position())
+					building_right_clicked.emit(building_id, port_idx)
 				else:
 					# RMB on empty space cancels current mode
 					if current_mode != 0:

@@ -3,8 +3,6 @@ class_name BuildingVisual
 
 ## Visual representation of a building on the grid, syncing with BuildingData.
 
-
-
 var data: BuildingData
 var cell_size: int = 64
 var is_selected: bool = false
@@ -29,26 +27,24 @@ func setup(p_data: BuildingData, p_cell_size: int) -> void:
 	match data.type:
 		"portal":
 			accent_color = Color(1.0, 0.65, 0.2) # Portal orange magic
-		"miner":
-			accent_color = Color(0.9, 0.45, 0.1) # Amber / Orange
-		"miner_iron":
-			accent_color = Color(0.8, 0.5, 0.3) # Iron brown
-		"miner_coal":
-			accent_color = Color(0.3, 0.3, 0.35) # Dark gray
-		"miner_crystal":
-			accent_color = Color(0.7, 0.4, 0.9) # Magical purple
-		"crusher":
-			accent_color = Color(0.5, 0.5, 0.5) # Steel gray
+		"miner", "miner_iron", "miner_coal", "miner_crystal":
+			accent_color = Color(0.9, 0.45, 0.1) # Amber / Mining Orange
 		"smelter":
 			accent_color = Color(0.95, 0.25, 0.25) # Hot Red
-		"constructor":
-			accent_color = Color(0.2, 0.7, 0.9) # Cyan
-		"alchemy_lab":
-			accent_color = Color(0.1, 0.8, 0.8) # Teal alchemical glow
+		"converter", "constructor", "crusher":
+			accent_color = Color(0.2, 0.8, 0.5) # Emerald Mint
+		"assembler":
+			accent_color = Color(0.3, 0.5, 0.95) # Deep Royal Blue
+		"extractor":
+			accent_color = Color(0.85, 0.35, 0.85) # Aether Magenta
+		"infuser", "alchemy_lab":
+			accent_color = Color(0.9, 0.5, 0.9) # Purple Infusion
 		"artifact_altar":
 			accent_color = Color(0.9, 0.8, 0.2) # Golden magic yellow
 		"seller":
 			accent_color = Color(0.2, 0.85, 0.4) # Emerald Green
+		"splitter_2", "splitter_3":
+			accent_color = Color(0.9, 0.9, 0.3) # Logic Bright Yellow
 		_:
 			accent_color = Color(0.7, 0.7, 0.7)
 			
@@ -58,6 +54,22 @@ func setup(p_data: BuildingData, p_cell_size: int) -> void:
 	
 	_create_ui()
 	_update_ui()
+
+func _draw() -> void:
+	if data == null:
+		return
+	var recipe_ctx = {"inputs": data.inputs, "outputs": data.outputs}
+	var out_count = BuildingData.get_output_ports_count(data.type, recipe_ctx)
+	for i in range(out_count):
+		var pt = to_local(get_port_global_position(true, i))
+		draw_circle(pt, 5.0, Color(1.0, 0.85, 0.2, 0.9)) # Orange/Yellow output dot
+		draw_arc(pt, 5.0, 0, TAU, 16, Color.BLACK, 1.5)
+		
+	var in_count = BuildingData.get_input_ports_count(data.type, recipe_ctx)
+	for i in range(in_count):
+		var pt = to_local(get_port_global_position(false, i))
+		draw_circle(pt, 5.0, Color(0.3, 0.7, 1.0, 0.9)) # Blue input dot
+		draw_arc(pt, 5.0, 0, TAU, 16, Color.BLACK, 1.5)
 
 func _create_ui() -> void:
 	var size_px = Vector2(data.size_in_cells * cell_size)
@@ -155,15 +167,15 @@ func _set_mouse_ignore(node: Node) -> void:
 	for child in node.get_children():
 		_set_mouse_ignore(child)
 
-
 func _process(_delta: float) -> void:
 	if data == null:
 		return
 	_update_ui()
+	queue_redraw()
 
 func _update_ui() -> void:
 	# Update progress bar
-	if data.active_recipe.is_empty():
+	if data.type == "portal" or data.active_recipe.is_empty():
 		progress_bar.visible = false
 	else:
 		progress_bar.visible = true
@@ -212,12 +224,17 @@ func _update_ui() -> void:
 			style.shadow_color = Color(0, 0, 0, 0.3)
 
 func _update_resource_list(container: VBoxContainer, resources: Dictionary, limits: Dictionary, is_input: bool) -> void:
+	var display_res: Dictionary = {}
+	for res in resources:
+		if not res.begins_with("_"):
+			display_res[res] = resources[res]
+
 	# Rebuild children if count or resource keys mismatch
 	var needs_rebuild = false
-	if container.get_child_count() != resources.size():
+	if container.get_child_count() != display_res.size():
 		needs_rebuild = true
 	else:
-		for res in resources:
+		for res in display_res:
 			if not container.has_node(res):
 				needs_rebuild = true
 				break
@@ -227,36 +244,100 @@ func _update_resource_list(container: VBoxContainer, resources: Dictionary, limi
 			child.queue_free()
 			container.remove_child(child)
 		
-		for res in resources:
+		for res in display_res:
 			var lbl = Label.new()
 			lbl.name = res
 			lbl.add_theme_font_size_override("font_size", 9)
 			lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT if is_input else HORIZONTAL_ALIGNMENT_RIGHT
+			lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+			lbl.clip_text = true
+			lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			container.add_child(lbl)
 			
 	# Update text values
 	for child in container.get_children():
 		var res_name = child.name
-		if resources.has(res_name):
-			var val = int(round(resources[res_name]))
-			# Format resource name (remove "iron_" prefix for cleanliness)
-			var short_name = res_name.replace("iron_", "")
+		if display_res.has(res_name):
+			var val = int(round(display_res[res_name]))
+			var short_name = res_name.replace("iron_", "").replace("_", " ").capitalize()
 			child.text = "%s: %d" % [short_name, val]
 			if is_input:
 				child.add_theme_color_override("font_color", Color(0.8, 0.7, 0.7))
 			else:
 				child.add_theme_color_override("font_color", Color(0.7, 0.8, 0.7))
 
+## Finds input port index corresponding to an incoming resource.
+func get_input_port_for_resource(res_name: String) -> int:
+	if data == null:
+		return 0
+	if inputs_container != null:
+		for i in range(inputs_container.get_child_count()):
+			if inputs_container.get_child(i).name == res_name:
+				return i
+	return 0
+
+## Helper function to calculate exact global position of input/output port anchor.
+func get_port_global_position(is_output: bool, port_idx: int) -> Vector2:
+	if data == null:
+		return global_position
+		
+	var half_width = data.size_in_cells.x * cell_size / 2.0
+	var half_height = data.size_in_cells.y * cell_size / 2.0
+	
+	var recipe_ctx = {"inputs": data.inputs, "outputs": data.outputs}
+	var total_ports = BuildingData.get_output_ports_count(data.type, recipe_ctx) if is_output else BuildingData.get_input_ports_count(data.type, recipe_ctx)
+	if total_ports <= 0:
+		return global_position
+		
+	port_idx = clamp(port_idx, 0, total_ports - 1)
+	var side_x = half_width if is_output else -half_width
+	var target_container = outputs_container if is_output else inputs_container
+	
+	# Align port vertically with corresponding resource label if present
+	if is_instance_valid(target_container) and port_idx < target_container.get_child_count():
+		var child = target_container.get_child(port_idx) as Control
+		if is_instance_valid(child) and child.size.y > 0:
+			var port_y = child.global_position.y + child.size.y / 2.0
+			return Vector2(global_position.x + side_x, port_y)
+			
+	# Otherwise (for splitters or empty lists), evenly space ports across lower resource area
+	var start_y = global_position.y - half_height * 0.2
+	var end_y = global_position.y + half_height * 0.7
+	if total_ports == 1:
+		return Vector2(global_position.x + side_x, (start_y + end_y) / 2.0)
+		
+	var area_height = end_y - start_y
+	var step = area_height / float(total_ports)
+	var port_y = start_y + (float(port_idx) + 0.5) * step
+	return Vector2(global_position.x + side_x, port_y)
+
+## Determines output sub-port index based on mouse click global position.
+func get_output_port_at_position(click_global_pos: Vector2) -> int:
+	if data == null:
+		return 0
+	var recipe_ctx = {"inputs": data.inputs, "outputs": data.outputs}
+	var total_ports = BuildingData.get_output_ports_count(data.type, recipe_ctx)
+	if total_ports <= 1:
+		return 0
+		
+	var best_idx = 0
+	var best_dist = INF
+	for i in range(total_ports):
+		var port_pos = get_port_global_position(true, i)
+		var dist = click_global_pos.distance_to(port_pos)
+		if dist < best_dist:
+			best_dist = dist
+			best_idx = i
+	return best_idx
+
 ## Helper function to calculate connection point (on building outer edge) toward another point
 func get_connection_point_toward(target_pos: Vector2) -> Vector2:
 	var my_center = global_position
 	var dir = (target_pos - my_center).normalized()
 	
-	# Bounding box of the panel
 	var half_width = data.size_in_cells.x * cell_size / 2.0
 	var half_height = data.size_in_cells.y * cell_size / 2.0
 	
-	# Find intersection of dir line with bounding box of size (width x height)
 	if dir.x == 0:
 		return my_center + Vector2(0, signf(dir.y) * half_height)
 		

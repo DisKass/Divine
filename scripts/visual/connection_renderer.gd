@@ -10,7 +10,9 @@ class_name ConnectionRenderer
 
 class ResourcePacket:
 	var from_id: int
+	var from_port: int
 	var to_id: int
+	var to_port: int
 	var resource_name: String
 	var progress: float = 0.0 # Center position in pixels along travel path
 	var max_travel_dist: float = 0.0
@@ -30,15 +32,15 @@ func setup(p_network: FactoryNetwork, p_visuals_map: Dictionary) -> void:
 	if network != null:
 		network.resource_transferred.connect(_on_resource_transferred)
 
-func _on_resource_transferred(from_id: int, to_id: int, resource_name: String, _amount: float, transfer_rate: float) -> void:
+func _on_resource_transferred(from_id: int, from_port: int, to_id: int, to_port: int, resource_name: String, _amount: float, transfer_rate: float) -> void:
 	var from_vis: BuildingVisual = visuals_map.get(from_id)
 	var to_vis: BuildingVisual = visuals_map.get(to_id)
 	
 	if not is_instance_valid(from_vis) or not is_instance_valid(to_vis):
 		return
 		
-	var start_pt = from_vis.get_connection_point_toward(to_vis.global_position)
-	var end_pt = to_vis.get_connection_point_toward(from_vis.global_position)
+	var start_pt = from_vis.get_port_global_position(true, from_port)
+	var end_pt = to_vis.get_port_global_position(false, to_port)
 	var dist = start_pt.distance_to(end_pt)
 	if dist < 1.0:
 		return
@@ -46,11 +48,12 @@ func _on_resource_transferred(from_id: int, to_id: int, resource_name: String, _
 	var half_len = packet_length * 0.5
 	var packet = ResourcePacket.new()
 	packet.from_id = from_id
+	packet.from_port = from_port
 	packet.to_id = to_id
+	packet.to_port = to_port
 	packet.resource_name = resource_name
 	packet.progress = -half_len
 	packet.max_travel_dist = dist + half_len
-	# Entire visual travel path is (dist + packet_length) pixels.
 	packet.speed = (dist + packet_length) * maxf(transfer_rate, 0.1)
 	active_packets.append(packet)
 
@@ -73,7 +76,9 @@ func _draw() -> void:
 	# 1. Draw base connection pipe lines
 	for conn in network.connections:
 		var from_id = conn["from_id"]
+		var from_port = int(conn.get("from_port", 0))
 		var to_id = conn["to_id"]
+		var to_port = int(conn.get("to_port", 0))
 		
 		var from_vis: BuildingVisual = visuals_map.get(from_id)
 		var to_vis: BuildingVisual = visuals_map.get(to_id)
@@ -81,8 +86,8 @@ func _draw() -> void:
 		if not is_instance_valid(from_vis) or not is_instance_valid(to_vis):
 			continue
 			
-		var start_pt = from_vis.get_connection_point_toward(to_vis.global_position)
-		var end_pt = to_vis.get_connection_point_toward(from_vis.global_position)
+		var start_pt = from_vis.get_port_global_position(true, from_port)
+		var end_pt = to_vis.get_port_global_position(false, to_port)
 		
 		draw_line(start_pt, end_pt, line_color, line_width)
 		
@@ -94,8 +99,8 @@ func _draw() -> void:
 		if not is_instance_valid(from_vis) or not is_instance_valid(to_vis):
 			continue
 			
-		var start_pt = from_vis.get_connection_point_toward(to_vis.global_position)
-		var end_pt = to_vis.get_connection_point_toward(from_vis.global_position)
+		var start_pt = from_vis.get_port_global_position(true, pkt.from_port)
+		var end_pt = to_vis.get_port_global_position(false, pkt.to_port)
 		var total_len = start_pt.distance_to(end_pt)
 		if total_len < 1.0:
 			continue
@@ -123,7 +128,15 @@ func _get_resource_color(res_name: String) -> Color:
 			return Color(0.7, 0.85, 1.0) # Silver Steel
 		"iron_gear":
 			return Color(0.9, 0.7, 0.4) # Bronze Gear
+		"coal":
+			return Color(0.4, 0.4, 0.45) # Dark Coal
+		"mana_crystal":
+			return Color(0.8, 0.4, 1.0) # Mana Purple
+		"crystal_dust":
+			return Color(0.9, 0.7, 1.0) # Dust Light Purple
+		"mana_essence":
+			return Color(0.2, 0.9, 0.9) # Essence Cyan
+		"runesteel_ingot", "steel_ingot":
+			return Color(0.5, 0.8, 0.9) # Steel Ingot Blue-Gray
 		_:
 			return Color(0.4, 0.85, 1.0) # Glowing Cyan
-
-

@@ -160,6 +160,16 @@ func _initialize_game() -> void:
 		network = FactoryNetwork.new()
 		ticker = SimulationTicker.new(network, resource_manager, modifier_manager, milestones_manager, artifacts_manager)
 		
+	milestones_manager.milestone_completed.connect(func(_t, _d):
+		if network:
+			network.sync_portal_inputs(milestones_manager)
+	)
+	milestones_manager.milestone_reset.connect(func():
+		if network:
+			network.sync_portal_inputs(milestones_manager)
+	)
+	network.sync_portal_inputs(milestones_manager)
+
 	connection_renderer.setup(network, visuals_map)
 	if is_instance_valid(input_controller):
 		input_controller.setup(camera, network, visuals_map, build_preview)
@@ -217,10 +227,14 @@ func _handle_build(grid_pos: Vector2i) -> void:
 		var default_rec = default_recipes.get(selected_build_type, {})
 		var recipe = default_rec.duplicate(true) if not default_rec.is_empty() else {}
 		var b_data = network.add_building(selected_build_type, grid_pos, recipe)
+		if selected_build_type == "portal":
+			network.sync_portal_inputs(milestones_manager)
 		_create_building_visual(b_data)
 		_update_ui()
 		# Remain in build mode for quick placements!
 
+
+var link_source_port: int = 0
 
 func _handle_link(building_id: int) -> void:
 	if building_id == 0:
@@ -229,13 +243,38 @@ func _handle_link(building_id: int) -> void:
 	if link_source_id == 0:
 		# Set source
 		link_source_id = building_id
+		link_source_port = 0
 		visuals_map[link_source_id].is_selected = true
 		if is_instance_valid(input_controller):
 			input_controller.link_source_id = link_source_id
+			input_controller.link_source_port = link_source_port
 	else:
 		# We clicked the target building
 		if link_source_id != building_id:
-			network.add_connection(link_source_id, building_id)
+			var target_port = 0
+			var source_b = network.buildings.get(link_source_id)
+			var target_b = network.buildings.get(building_id)
+			var target_vis = visuals_map.get(building_id)
+			
+			if source_b and target_b:
+				var source_res = ""
+				var out_keys = []
+				for k in source_b.outputs.keys():
+					if not k.begins_with("_"):
+						out_keys.append(k)
+				if not source_b.active_recipe.is_empty():
+					var rec_outs = source_b.active_recipe.get("outputs", {}).keys()
+					for k in rec_outs:
+						if not out_keys.has(k):
+							out_keys.append(k)
+				if out_keys.size() > 0:
+					var p_idx = clamp(link_source_port, 0, out_keys.size() - 1)
+					source_res = out_keys[p_idx]
+					
+				if source_res != "" and is_instance_valid(target_vis):
+					target_port = target_vis.get_input_port_for_resource(source_res)
+					
+			network.add_connection(link_source_id, building_id, link_source_port, target_port)
 		_set_mouse_mode(MouseMode.INSPECT)
 
 func _handle_demolish(building_id: int) -> void:
@@ -294,6 +333,7 @@ func _set_mouse_mode(mode: MouseMode, build_type: String = "") -> void:
 	if link_source_id != 0 and visuals_map.has(link_source_id):
 		visuals_map[link_source_id].is_selected = false
 	link_source_id = 0
+	link_source_port = 0
 	
 	current_mode = mode
 	selected_build_type = build_type
@@ -306,6 +346,7 @@ func _set_mouse_mode(mode: MouseMode, build_type: String = "") -> void:
 		input_controller.current_mode = current_mode as int
 		input_controller.selected_build_type = selected_build_type
 		input_controller.link_source_id = link_source_id
+		input_controller.link_source_port = link_source_port
 		
 	# Refresh UI
 	_update_ui()
@@ -363,12 +404,14 @@ func _on_input_building_clicked(building_id: int) -> void:
 	else:
 		_handle_inspect(building_id)
 
-func _on_input_building_right_clicked(building_id: int) -> void:
+func _on_input_building_right_clicked(building_id: int, port_index: int = 0) -> void:
 	_set_mouse_mode(MouseMode.LINK)
 	link_source_id = building_id
+	link_source_port = port_index
 	visuals_map[link_source_id].is_selected = true
 	if is_instance_valid(input_controller):
 		input_controller.link_source_id = link_source_id
+		input_controller.link_source_port = link_source_port
 
 func _on_input_empty_space_clicked(grid_pos: Vector2i) -> void:
 	if current_mode == MouseMode.BUILD:

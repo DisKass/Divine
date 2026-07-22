@@ -6,25 +6,64 @@ extends RefCounted
 
 const DEFAULT_SIZES: Dictionary = {
 	"miner": Vector2i(3, 2),
+	"smelter": Vector2i(5, 3),
+	"converter": Vector2i(5, 3),
+	"assembler": Vector2i(5, 3),
+	"extractor": Vector2i(5, 3),
+	"infuser": Vector2i(5, 3),
+	"portal": Vector2i(5, 4),
+	"seller": Vector2i(5, 3),
+	"splitter_2": Vector2i(3, 3),
+	"splitter_3": Vector2i(3, 4),
+	# Backwards compatibility
 	"miner_iron": Vector2i(3, 2),
 	"miner_coal": Vector2i(3, 2),
 	"miner_crystal": Vector2i(3, 2),
 	"crusher": Vector2i(5, 3),
-	"smelter": Vector2i(5, 3),
 	"constructor": Vector2i(5, 3),
 	"alchemy_lab": Vector2i(5, 3),
-	"portal": Vector2i(5, 4),
-	"artifact_altar": Vector2i(5, 4),
-	"seller": Vector2i(5, 3)
+	"artifact_altar": Vector2i(5, 4)
 }
 
 static func get_default_size(p_type: String) -> Vector2i:
 	return DEFAULT_SIZES.get(p_type, Vector2i(5, 3))
 
+static func get_output_ports_count(p_type: String, p_recipe: Dictionary = {}) -> int:
+	match p_type:
+		"splitter_2": return 2
+		"splitter_3": return 3
+		"portal", "seller": return 0
+		_:
+			var out_dict = p_recipe.get("outputs", {})
+			var real_count = 0
+			for k in out_dict:
+				if not str(k).begins_with("_"):
+					real_count += 1
+			return max(1, real_count)
+
+static func get_input_ports_count(p_type: String, p_recipe: Dictionary = {}) -> int:
+	match p_type:
+		"miner": return 0
+		"assembler", "infuser":
+			var in_dict = p_recipe.get("inputs", {})
+			var real_count = 0
+			for k in in_dict:
+				if not str(k).begins_with("_"):
+					real_count += 1
+			return max(2, real_count)
+		_:
+			var in_dict = p_recipe.get("inputs", {})
+			var real_count = 0
+			for k in in_dict:
+				if not str(k).begins_with("_"):
+					real_count += 1
+			return max(1, real_count)
+
 var id: int
 var type: String
 var grid_position: Vector2i
 var size_in_cells: Vector2i = Vector2i(5, 3)
+var last_outgoing_conn_index: int = 0
 
 # Buffers: resource_name (String) -> amount (float)
 var inputs: Dictionary = {}
@@ -96,6 +135,15 @@ func set_recipe(p_recipe: Dictionary) -> void:
 
 ## Simulates a single tick of duration `delta` (usually 1.0 second).
 func tick(delta: float = 1.0, speed_multiplier: float = 1.0) -> void:
+	if type.begins_with("splitter"):
+		for res in inputs.keys():
+			var amt = inputs[res]
+			if amt > 0.0:
+				outputs[res] = outputs.get(res, 0.0) + amt
+				output_limits[res] = maxf(output_limits.get(res, 20.0), 20.0)
+				inputs[res] = 0.0
+		return
+
 	if active_recipe.is_empty():
 		return
 		

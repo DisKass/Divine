@@ -28,15 +28,15 @@ var _scroll_has_dragged: bool = false
 
 const BUILDING_DESCRIPTIONS: Dictionary = {
 	"portal": "Deliver Milestones",
-	"miner_iron": "➔ Iron Ore",
-	"miner_coal": "➔ Coal",
-	"miner_crystal": "➔ Mana Crystal",
-	"crusher": "Ore ➔ Dust",
-	"smelter": "Ore ➔ Plate/Ingot",
-	"constructor": "Plate ➔ Gear",
-	"alchemy_lab": "Dust ➔ Essence",
-	"artifact_altar": "Ingot ➔ Amulet",
-	"seller": "Goods ➔ Credits"
+	"miner": "Extract Resources",
+	"smelter": "Ore ➔ Ingot/Plate",
+	"converter": "Plate ➔ Gear/Dust",
+	"assembler": "Combine 2 Solids",
+	"extractor": "Solid ➔ Essence",
+	"infuser": "Solid + Essence",
+	"seller": "Goods ➔ Credits",
+	"splitter_2": "Split 2 Outputs",
+	"splitter_3": "Split 3 Outputs"
 }
 
 func _ready() -> void:
@@ -72,7 +72,7 @@ func _ready() -> void:
 	_create_build_buttons()
 
 func _create_build_buttons() -> void:
-	var card_types = ["portal", "miner_iron", "miner_coal", "miner_crystal", "crusher", "smelter", "constructor", "alchemy_lab", "artifact_altar", "seller"]
+	var card_types = ["portal", "miner", "smelter", "converter", "assembler", "extractor", "infuser", "seller", "splitter_2", "splitter_3"]
 	for b_type in card_types:
 		_create_building_card(build_tools_hbox, b_type)
 		
@@ -85,15 +85,14 @@ func _create_build_buttons() -> void:
 func _get_accent_color(type: String) -> Color:
 	match type:
 		"portal": return Color(1.0, 0.65, 0.2)
-		"miner_iron": return Color(0.8, 0.5, 0.3)
-		"miner_coal": return Color(0.3, 0.3, 0.35)
-		"miner_crystal": return Color(0.7, 0.4, 0.9)
-		"crusher": return Color(0.5, 0.5, 0.5)
+		"miner": return Color(0.9, 0.45, 0.1)
 		"smelter": return Color(0.95, 0.25, 0.25)
-		"constructor": return Color(0.2, 0.7, 0.9)
-		"alchemy_lab": return Color(0.1, 0.8, 0.8)
-		"artifact_altar": return Color(0.9, 0.8, 0.2)
+		"converter": return Color(0.2, 0.8, 0.5)
+		"assembler": return Color(0.3, 0.5, 0.95)
+		"extractor": return Color(0.85, 0.35, 0.85)
+		"infuser": return Color(0.9, 0.5, 0.9)
 		"seller": return Color(0.2, 0.85, 0.4)
+		"splitter_2", "splitter_3": return Color(0.9, 0.9, 0.3)
 		"demolish": return Color(0.95, 0.25, 0.25)
 		_: return Color(0.7, 0.7, 0.7)
 
@@ -152,7 +151,7 @@ func _create_building_card(parent_container: Control, b_type: String) -> void:
 	
 	var title_lbl = Label.new()
 	if b_type == "demolish": title_lbl.text = "Demolish"
-	elif b_type.begins_with("miner_"): title_lbl.text = b_type.replace("miner_", "").capitalize() + " Miner"
+	elif b_type.begins_with("splitter_"): title_lbl.text = "Splitter (" + b_type.replace("splitter_", "") + ")"
 	else: title_lbl.text = b_type.capitalize()
 		
 	title_lbl.add_theme_font_size_override("font_size", 11)
@@ -269,7 +268,7 @@ func update_hud_new(res_mgr: ResourceManager, build_mgr: BuildingManager, upg_mg
 		var count = build_mgr.building_counts[type]
 		if count > 0:
 			var display_name = type.capitalize()
-			if type.begins_with("miner_"): display_name = type.replace("miner_", "").capitalize() + " Miner"
+			if type.begins_with("splitter_"): display_name = "Splitter (" + type.replace("splitter_", "") + ")"
 			popup.add_item("%s: %d" % [display_name, count])
 		total_buildings += count
 		
@@ -290,7 +289,8 @@ func update_hud_new(res_mgr: ResourceManager, build_mgr: BuildingManager, upg_mg
 	if tool_buttons.has(active_btn_name):
 		tool_buttons[active_btn_name].button_pressed = true
 		
-	for b_type in ["portal", "miner_iron", "miner_coal", "miner_crystal", "crusher", "smelter", "constructor", "alchemy_lab", "artifact_altar", "seller"]:
+	var card_types = ["portal", "miner", "smelter", "converter", "assembler", "extractor", "infuser", "seller", "splitter_2", "splitter_3"]
+	for b_type in card_types:
 		if tool_buttons.has(b_type):
 			var btn: Button = tool_buttons[b_type]
 			var is_unlocked = build_mgr.is_building_unlocked(b_type)

@@ -21,7 +21,7 @@ func _init(res_mgr: ResourceManager, ms_mgr: MilestonesManager) -> void:
 func _load_cost_configs() -> void:
 	# In a real large project, this could be loaded via DirAccess
 	# We manually specify to ensure all are loaded securely
-	var types = ["portal", "miner", "miner_iron", "miner_coal", "miner_crystal", "crusher", "smelter", "constructor", "alchemy_lab", "artifact_altar", "seller"]
+	var types = ["portal", "miner", "smelter", "converter", "assembler", "extractor", "infuser", "seller", "splitter_2", "splitter_3", "miner_iron", "miner_coal", "miner_crystal", "crusher", "constructor", "alchemy_lab", "artifact_altar"]
 	for type in types:
 		var path = "res://data/buildings/" + type + ".tres"
 		if ResourceLoader.exists(path):

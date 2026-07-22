@@ -39,12 +39,8 @@ func submit_portal_resource(res_name: String, amount: float) -> void:
 	
 	if active_m.requirements.has(res_name):
 		var target = float(active_m.requirements[res_name])
-		var current = milestone_progress.get(res_name, 0.0)
-		var space = maxf(target - current, 0.0)
-		var added = minf(amount, space)
-		if added > 0.0:
-			milestone_progress[res_name] = current + added
-			check_milestone_completion()
+		milestone_progress[res_name] = minf(amount, target)
+		check_milestone_completion()
 
 ## Checks if active milestone is fulfilled and advances to next.
 func check_milestone_completion() -> void:
