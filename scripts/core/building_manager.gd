@@ -13,6 +13,9 @@ var building_counts: Dictionary = {}
 # building_type (String) -> BuildingCostData (Resource)
 var cost_configs: Dictionary = {}
 
+# GD Panel override: allow placing buildings for free
+var free_buildings_mode: bool = false
+
 func _init(res_mgr: ResourceManager, ms_mgr: MilestonesManager) -> void:
 	resource_manager = res_mgr
 	milestones_manager = ms_mgr
@@ -73,6 +76,8 @@ func get_building_cost(type: String) -> Dictionary:
 func can_afford(type: String) -> bool:
 	if not is_building_unlocked(type) or is_building_limit_reached(type):
 		return false
+	if free_buildings_mode:
+		return true
 	var cost = get_building_cost(type)
 	return resource_manager.can_afford(cost)
 
@@ -81,6 +86,10 @@ func buy_building(type: String) -> bool:
 	if not can_afford(type):
 		return false
 		
+	if free_buildings_mode:
+		building_counts[type] = building_counts.get(type, 0) + 1
+		return true
+
 	var cost = get_building_cost(type)
 	if resource_manager.spend(cost):
 		building_counts[type] = building_counts.get(type, 0) + 1

@@ -25,6 +25,7 @@ var milestones_manager: MilestonesManager
 var artifacts_manager: ArtifactsManager
 var building_manager: BuildingManager
 var upgrades_manager: UpgradesManager
+var template_manager: TemplateManager
 var ticker: SimulationTicker
 
 # Visual maps: building_id -> BuildingVisual
@@ -107,7 +108,7 @@ func _ready() -> void:
 	hud.gd_panel = gd_panel
 	gd_panel.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
 	gd_panel.visible = false
-	gd_panel.setup(milestones_manager, upgrades_manager, self)
+	gd_panel.setup(milestones_manager, upgrades_manager, self, building_manager, template_manager)
 	
 	# Connect to tick signal to update UI
 	ticker.tick_completed.connect(_on_simulation_tick)
@@ -124,23 +125,30 @@ func _initialize_game() -> void:
 	artifacts_manager = ArtifactsManager.new(modifier_manager)
 	building_manager = BuildingManager.new(resource_manager, milestones_manager)
 	upgrades_manager = UpgradesManager.new(resource_manager, modifier_manager)
+	template_manager = TemplateManager.new()
+	network = FactoryNetwork.new()
 	
 	if not save_data.is_empty():
-		var net_dict = save_data["network_dict"]
-		var saved_time = save_data["timestamp"]
-		
-		network = FactoryNetwork.from_dict(net_dict)
-		
-		# For old saves, they might come from economy_dict fallback
-		# The new load_game() provides them mapped.
-		resource_manager.from_dict(save_data.get("resource_manager_dict", {}))
-		building_manager.from_dict(save_data.get("building_manager_dict", {}))
-		upgrades_manager.from_dict(save_data.get("upgrades_manager_dict", {}))
-		artifacts_manager.from_dict(save_data.get("artifacts_manager_dict", {}))
-		milestones_manager.from_dict(save_data.get("milestones_manager_dict", {}))
+		var tpl_dict = save_data.get("template_manager_dict", {})
+		if not tpl_dict.is_empty():
+			template_manager.from_dict(tpl_dict)
+			
+		var active_snap = template_manager.templates.get(template_manager.active_template_id, {}).get("snapshot", {})
+		if not active_snap.is_empty():
+			TemplateManager.apply_snapshot(active_snap, network, resource_manager, building_manager, upgrades_manager, artifacts_manager, milestones_manager)
+		else:
+			var net_dict = save_data.get("network_dict", {})
+			network = FactoryNetwork.from_dict(net_dict)
+			resource_manager.from_dict(save_data.get("resource_manager_dict", {}))
+			building_manager.from_dict(save_data.get("building_manager_dict", {}))
+			upgrades_manager.from_dict(save_data.get("upgrades_manager_dict", {}))
+			artifacts_manager.from_dict(save_data.get("artifacts_manager_dict", {}))
+			milestones_manager.from_dict(save_data.get("milestones_manager_dict", {}))
+			
+		var saved_time = save_data.get("timestamp", int(Time.get_unix_time_from_system()))
 		
 		# Migrate old starting credits (50$) to new 85$ for fresh profiles
-		var total_buildings = net_dict.get("buildings", []).size()
+		var total_buildings = network.buildings.size()
 		if total_buildings == 0 and resource_manager.get_resource("credits") < 85.0:
 			resource_manager.add_resource("credits", 85.0 - resource_manager.get_resource("credits"))
 			
@@ -157,7 +165,6 @@ func _initialize_game() -> void:
 			_show_offline_catchup_popup(catchup)
 	else:
 		# Initial state
-		network = FactoryNetwork.new()
 		ticker = SimulationTicker.new(network, resource_manager, modifier_manager, milestones_manager, artifacts_manager)
 		
 	milestones_manager.milestone_completed.connect(func(_t, _d):
@@ -199,7 +206,7 @@ func _process(delta: float) -> void:
 	save_timer += delta
 	if save_timer >= AUTO_SAVE_INTERVAL:
 		save_timer = 0.0
-		SaveManager.save_game(network, resource_manager, building_manager, upgrades_manager, artifacts_manager, milestones_manager)
+		SaveManager.save_game(network, resource_manager, building_manager, upgrades_manager, artifacts_manager, milestones_manager, template_manager)
 
 func _handle_inspect(building_id: int) -> void:
 	# Deselect current
@@ -393,7 +400,7 @@ func _on_recipe_selected(idx: int) -> void:
 		b_data.set_recipe(new_recipe)
 		network.rebuild_caches()
 		_update_inspector()
-		SaveManager.save_game(network, resource_manager, building_manager, upgrades_manager, artifacts_manager, milestones_manager)
+		SaveManager.save_game(network, resource_manager, building_manager, upgrades_manager, artifacts_manager, milestones_manager, template_manager)
 
 # --- Input Controller Handlers ---
 
@@ -421,10 +428,66 @@ func _on_input_empty_space_clicked(grid_pos: Vector2i) -> void:
 		_handle_inspect(0)
 
 func _on_input_building_move_completed() -> void:
-	SaveManager.save_game(network, resource_manager, building_manager, upgrades_manager, artifacts_manager, milestones_manager)
+	SaveManager.save_game(network, resource_manager, building_manager, upgrades_manager, artifacts_manager, milestones_manager, template_manager)
 
 func _on_input_link_mode_cancelled() -> void:
 	_set_mouse_mode(MouseMode.INSPECT)
+
+# --- Template Management ---
+
+func switch_template(target_id: String) -> void:
+	if template_manager == null:
+		return
+	var current_snap = TemplateManager.capture_snapshot(network, resource_manager, building_manager, upgrades_manager, artifacts_manager, milestones_manager)
+	if template_manager.switch_template(target_id, current_snap, network, resource_manager, building_manager, upgrades_manager, artifacts_manager, milestones_manager):
+		network.sync_portal_inputs(milestones_manager)
+		_rebuild_visuals()
+		SaveManager.save_game(network, resource_manager, building_manager, upgrades_manager, artifacts_manager, milestones_manager, template_manager)
+		_update_ui()
+
+func create_template(template_name: String) -> void:
+	if template_manager == null:
+		return
+	var current_snap = TemplateManager.capture_snapshot(network, resource_manager, building_manager, upgrades_manager, artifacts_manager, milestones_manager)
+	template_manager.create_template(template_name, current_snap)
+	SaveManager.save_game(network, resource_manager, building_manager, upgrades_manager, artifacts_manager, milestones_manager, template_manager)
+	_update_ui()
+
+func reset_active_template() -> void:
+	if template_manager == null:
+		return
+	template_manager.reset_active_template(network, resource_manager, building_manager, upgrades_manager, artifacts_manager, milestones_manager)
+	network.sync_portal_inputs(milestones_manager)
+	_rebuild_visuals()
+	SaveManager.save_game(network, resource_manager, building_manager, upgrades_manager, artifacts_manager, milestones_manager, template_manager)
+	_update_ui()
+
+func delete_active_template() -> void:
+	if template_manager == null:
+		return
+	template_manager.delete_active_template(network, resource_manager, building_manager, upgrades_manager, artifacts_manager, milestones_manager)
+	network.sync_portal_inputs(milestones_manager)
+	_rebuild_visuals()
+	SaveManager.save_game(network, resource_manager, building_manager, upgrades_manager, artifacts_manager, milestones_manager, template_manager)
+	_update_ui()
+
+func _rebuild_visuals() -> void:
+	for visual in visuals_map.values():
+		if is_instance_valid(visual):
+			visual.queue_free()
+	visuals_map.clear()
+	selected_building_id = 0
+	if inspector_panel != null and inspector_panel.has_method("update_inspector_new"):
+		inspector_panel.update_inspector_new(null, null)
+		inspector_panel.visible = false
+		
+	for b_id in network.buildings:
+		var b_data = network.buildings[b_id]
+		_create_building_visual(b_data)
+		
+	connection_renderer.setup(network, visuals_map)
+	if is_instance_valid(input_controller):
+		input_controller.setup(camera, network, visuals_map, build_preview)
 
 # --- Offline Catch-up Dialog ---
 
@@ -468,11 +531,13 @@ func _on_reset_pressed() -> void:
 	
 	# Clear visual instances
 	for visual in visuals_map.values():
-		visual.queue_free()
+		if is_instance_valid(visual):
+			visual.queue_free()
 	visuals_map.clear()
 	selected_building_id = 0
-	if inspector_panel.has_method("update_inspector_new"):
+	if inspector_panel != null and inspector_panel.has_method("update_inspector_new"):
 		inspector_panel.update_inspector_new(null, null)
+		inspector_panel.visible = false
 	
 	# Re-init core
 	network = FactoryNetwork.new()
@@ -482,7 +547,15 @@ func _on_reset_pressed() -> void:
 	artifacts_manager = ArtifactsManager.new(modifier_manager)
 	building_manager = BuildingManager.new(resource_manager, milestones_manager)
 	upgrades_manager = UpgradesManager.new(resource_manager, modifier_manager)
+	template_manager = TemplateManager.new()
 	ticker = SimulationTicker.new(network, resource_manager, modifier_manager, milestones_manager, artifacts_manager)
 	ticker.tick_completed.connect(_on_simulation_tick)
+	
+	connection_renderer.setup(network, visuals_map)
+	if is_instance_valid(input_controller):
+		input_controller.setup(camera, network, visuals_map, build_preview)
+	if gd_panel != null:
+		gd_panel.setup(milestones_manager, upgrades_manager, self, building_manager, template_manager)
+		
 	_set_mouse_mode(MouseMode.INSPECT)
 	_update_ui()

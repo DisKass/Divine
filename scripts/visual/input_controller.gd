@@ -34,6 +34,11 @@ func setup(p_camera: GameCamera, p_network: FactoryNetwork, p_visuals_map: Dicti
 	network = p_network
 	visuals_map = p_visuals_map
 	build_preview = p_preview
+	
+	_is_dragging_building = false
+	_dragged_building_id = 0
+	link_source_id = 0
+	link_source_port = 0
 
 func _process(_delta: float) -> void:
 	if network == null:

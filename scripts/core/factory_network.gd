@@ -386,3 +386,28 @@ static func from_dict(dict: Dictionary) -> FactoryNetwork:
 		
 	net.rebuild_caches()
 	return net
+
+## Reloads an existing network instance from dictionary.
+func load_from_dict(dict: Dictionary) -> void:
+	next_id = int(dict.get("next_id", 1))
+	buildings.clear()
+	grid.clear()
+	connections.clear()
+	
+	var serialized_buildings = dict.get("buildings", [])
+	for b_dict in serialized_buildings:
+		var b = BuildingData.from_dict(b_dict)
+		buildings[b.id] = b
+		for cell in b.get_occupied_cells():
+			grid[cell] = b.id
+			
+	var raw_conns = dict.get("connections", [])
+	for conn in raw_conns:
+		connections.append({
+			"from_id": int(conn.get("from_id", 0)),
+			"from_port": int(conn.get("from_port", 0)),
+			"to_id": int(conn.get("to_id", 0)),
+			"to_port": int(conn.get("to_port", 0))
+		})
+		
+	rebuild_caches()

@@ -30,6 +30,7 @@ func setup(p_network: FactoryNetwork, p_visuals_map: Dictionary) -> void:
 		
 	network = p_network
 	visuals_map = p_visuals_map
+	active_packets.clear()
 	
 	if network != null:
 		network.resource_transferred.connect(_on_resource_transferred)
