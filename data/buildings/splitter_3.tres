@@ -1,13 +1,14 @@
 [gd_resource type="Resource" script_class="BuildingCostData" format=3]
 
-[ext_resource type="Script" path="res://scripts/resources/building_cost_data.gd" id="1_tysne"]
+[ext_resource type="Script" path="res://scripts/resources/building_cost_data.gd" id="1_spl3"]
 
 [resource]
-script = ExtResource("1_tysne")
-multiplier = 1.18
+script = ExtResource("1_spl3")
+tier = 2
+size_in_cells = Vector2i(1, 2)
 base_costs = {
-"credits": 30.0
+"credits": 50.0
 }
 first_paid_costs = {
-"credits": 60.0
+"credits": 80.0
 }

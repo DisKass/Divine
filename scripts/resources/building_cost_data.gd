@@ -6,6 +6,7 @@ extends Resource
 @export var tier: int = 1
 @export var multiplier: float = 1.15
 @export var max_count: int = -1 # -1 means no limit
+@export var size_in_cells: Vector2i = Vector2i.ZERO
 
 # Costs for the very first building (count == 0)
 @export var base_costs: Dictionary = {}

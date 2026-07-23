@@ -30,6 +30,14 @@ func _load_cost_configs() -> void:
 		if ResourceLoader.exists(path):
 			cost_configs[type] = ResourceLoader.load(path)
 
+## Returns the size in grid cells for the building type from its config or default map.
+func get_building_size(type: String) -> Vector2i:
+	if cost_configs.has(type):
+		var config: BuildingCostData = cost_configs[type]
+		if config != null and config.size_in_cells != Vector2i.ZERO:
+			return config.size_in_cells
+	return BuildingData.get_default_size(type)
+
 ## Returns whether a building type is unlocked under current milestone tier.
 func is_building_unlocked(type: String) -> bool:
 	if not cost_configs.has(type): return false

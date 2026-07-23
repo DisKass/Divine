@@ -25,22 +25,8 @@ const DEFAULT_SIZES: Dictionary = {
 	"artifact_altar": Vector2i(4, 3)
 }
 
-static func get_default_size(p_type: String, p_recipe: Dictionary = {}) -> Vector2i:
-	if p_type.begins_with("splitter"):
-		return Vector2i(1, 2)
-		
-	var width = 4
-	if p_type.begins_with("miner"):
-		width = 3
-		
-	var in_count = get_input_ports_count(p_type, p_recipe)
-	var out_count = get_output_ports_count(p_type, p_recipe)
-	var total_entries = in_count + out_count
-	
-	var resource_cells = int(ceil(float(max(1, total_entries)) / 2.0))
-	var height = 1 + resource_cells
-	
-	return Vector2i(width, height)
+static func get_default_size(p_type: String) -> Vector2i:
+	return DEFAULT_SIZES.get(p_type, Vector2i(4, 2))
 
 static func get_output_ports_count(p_type: String, p_recipe: Dictionary = {}) -> int:
 	match p_type:
@@ -76,7 +62,7 @@ static func get_input_ports_count(p_type: String, p_recipe: Dictionary = {}) -> 
 var id: int
 var type: String
 var grid_position: Vector2i
-var size_in_cells: Vector2i = Vector2i(5, 3)
+var size_in_cells: Vector2i = Vector2i(4, 2)
 var last_outgoing_conn_index: int = 0
 
 # Buffers: resource_name (String) -> amount (float)
@@ -101,7 +87,7 @@ func _init(p_id: int, p_type: String, p_pos: Vector2i, p_recipe: Dictionary = {}
 	type = p_type
 	grid_position = p_pos
 	active_recipe = p_recipe
-	size_in_cells = p_size if p_size != Vector2i.ZERO else get_default_size(p_type, p_recipe)
+	size_in_cells = p_size if p_size != Vector2i.ZERO else get_default_size(p_type)
 	
 	# Initialize buffers from recipe if present
 	if not active_recipe.is_empty():
@@ -128,7 +114,7 @@ func get_occupied_cells() -> Array[Vector2i]:
 ## Changes the active recipe of the building, resetting production progress and buffers.
 func set_recipe(p_recipe: Dictionary) -> void:
 	active_recipe = p_recipe.duplicate(true)
-	size_in_cells = get_default_size(type, active_recipe)
+	production_progress = 0.0
 	production_progress = 0.0
 	is_producing = false
 	
@@ -225,7 +211,7 @@ func to_dict() -> Dictionary:
 static func from_dict(dict: Dictionary) -> BuildingData:
 	var pos = Vector2i(int(dict["grid_position"][0]), int(dict["grid_position"][1]))
 	var recipe = dict.get("active_recipe", {}).duplicate()
-	var size = get_default_size(dict.get("type", ""), recipe)
+	var size = get_default_size(dict.get("type", ""))
 	
 	var b = BuildingData.new(int(dict["id"]), dict["type"], pos, recipe, size)
 	

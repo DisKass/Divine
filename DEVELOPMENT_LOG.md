@@ -4,6 +4,18 @@
 
 ---
 
+### [2026-07-23] 🚀 **`[Коммит]`** refactor: Replace dynamic building sizing with static config-based cell dimensions
+- **Conversation ID**: `c75ae29f-9772-4c4f-9156-38f071e488da`
+
+### Фактические изменения
+1. Отказались от динамического вычисления высоты зданий по рецептам и входам/выходам.
+2. Добавлено экспортируемое поле `size_in_cells` в `BuildingCostData` для считывания размеров напрямую из `.tres` конфигов.
+3. В `BuildingManager` добавлен метод `get_building_size()`, а в `BuildingData` упрощен метод `get_default_size(p_type)` до прямого чтения `DEFAULT_SIZES`.
+4. Удалено изменение размера здания при вызове `set_recipe()`.
+5. Очищены вызовы `get_default_size()` от параметров рецептов в `factory_network.gd`, `input_controller.gd` и `main_game.gd`.
+
+---
+
 ### [2026-07-23] 🚀 **`[Коммит]`** feat: GDPanel & State Slots: Free building mode, template profiles and slot management
 - **Conversation ID**: `c75ae29f-9772-4c4f-9156-38f071e488da`
 

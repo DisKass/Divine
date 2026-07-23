@@ -188,8 +188,7 @@ func _process(delta: float) -> void:
 	# Color red if blocked, green if empty and affordable (BUILD preview)
 	if current_mode == MouseMode.BUILD and is_instance_valid(input_controller):
 		var grid_pos = input_controller._get_build_placement_grid_pos(selected_build_type)
-		var default_rec = default_recipes.get(selected_build_type, {})
-		var b_size = BuildingData.get_default_size(selected_build_type, default_rec)
+		var b_size = BuildingData.get_default_size(selected_build_type)
 		var style = build_preview.get_theme_stylebox("panel") as StyleBoxFlat
 		if style:
 			if not network.is_area_free(grid_pos, b_size):
@@ -223,7 +222,7 @@ func _handle_inspect(building_id: int) -> void:
 
 func _handle_build(grid_pos: Vector2i) -> void:
 	var default_rec = default_recipes.get(selected_build_type, {})
-	var b_size = BuildingData.get_default_size(selected_build_type, default_rec)
+	var b_size = BuildingData.get_default_size(selected_build_type)
 	if not network.is_area_free(grid_pos, b_size):
 		return # Blocked
 
@@ -317,7 +316,7 @@ func _create_building_visual(b_data: BuildingData) -> void:
 
 func _create_build_preview() -> void:
 	build_preview = PanelContainer.new()
-	build_preview.custom_minimum_size = Vector2(110, 90)
+	build_preview.custom_minimum_size = Vector2.ZERO
 	build_preview.visible = false
 	build_preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	
