@@ -5,8 +5,6 @@ class_name InspectorPanel
 
 signal recipe_selected(recipe_idx: int)
 
-
-
 @onready var inspector_details: Label = $VBoxContainer/InspectorDetails
 @onready var recipe_container: HBoxContainer = $VBoxContainer/RecipeSelectorContainer
 @onready var recipe_button: OptionButton = $VBoxContainer/RecipeSelectorContainer/RecipeOptionButton
@@ -20,6 +18,7 @@ var _inspected_building_id: int = -1
 var _inspected_recipe_id: String = ""
 
 func update_inspector_new(b_data: BuildingData, build_mgr: BuildingManager) -> void:
+	inspector_details.remove_theme_color_override("font_color")
 	if b_data == null:
 		visible = false
 		_inspected_building_id = -1
@@ -91,6 +90,35 @@ func update_inspector_new(b_data: BuildingData, build_mgr: BuildingManager) -> v
 		recipe_container.visible = false
 		_inspected_building_id = b_data.id
 		_inspected_recipe_id = active_recipe_id
+
+func update_multi_inspector(selected_count: int, total_cost: Dictionary = {}, can_afford: bool = true) -> void:
+	if selected_count <= 0:
+		visible = false
+		_inspected_building_id = -1
+		_inspected_recipe_id = ""
+		return
+
+	visible = true
+	recipe_container.visible = false
+	_inspected_building_id = -1
+	_inspected_recipe_id = ""
+
+	var text = "Selected Buildings: %d\n" % selected_count
+	if not total_cost.is_empty():
+		text += "-------------------------\n"
+		text += "Total Cost:\n"
+		for res in total_cost:
+			text += "  • %s: %.1f\n" % [res.replace("_", " ").capitalize(), total_cost[res]]
+		text += "Status: %s\n" % ("Affordable ✓" if can_afford else "Insufficient Funds ✗")
+		
+		if not can_afford:
+			inspector_details.add_theme_color_override("font_color", Color(0.95, 0.35, 0.25))
+		else:
+			inspector_details.add_theme_color_override("font_color", Color(0.2, 0.85, 0.4))
+	else:
+		inspector_details.remove_theme_color_override("font_color")
+
+	inspector_details.text = text
 
 func _on_recipe_selected(idx: int) -> void:
 	recipe_selected.emit(idx)

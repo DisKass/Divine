@@ -3,9 +3,7 @@ class_name MainGame
 
 ## Main Game Controller. Coordinates simulation, UI, mouse modes, and save management.
 
-
-
-enum MouseMode { INSPECT, BUILD, LINK, DEMOLISH }
+enum MouseMode { INSPECT, BUILD, LINK, DEMOLISH, COPY_BUILD }
 
 # Settings
 @export var cell_size: int = 32
@@ -16,6 +14,8 @@ var selected_build_type: String = ""
 var selected_building_id: int = 0
 var link_source_id: int = 0
 
+# Copy State
+var copy_data: Dictionary = {} # { "buildings": Array, "connections": Array, "bounds_size": Vector2i, "total_cost": Dictionary }
 
 # Core Managers
 var network: FactoryNetwork
@@ -98,6 +98,11 @@ func _ready() -> void:
 	input_controller.empty_space_clicked.connect(_on_input_empty_space_clicked)
 	input_controller.building_move_completed.connect(_on_input_building_move_completed)
 	input_controller.link_mode_cancelled.connect(_on_input_link_mode_cancelled)
+	input_controller.selection_changed.connect(_on_input_selection_changed)
+	input_controller.demolish_requested.connect(_on_input_demolish_requested)
+	input_controller.copy_requested.connect(_on_input_copy_requested)
+	input_controller.copy_placement_confirmed.connect(_on_input_copy_placement_confirmed)
+	input_controller.copy_placement_cancelled.connect(_on_input_copy_placement_cancelled)
 	
 	# 4. Load or Init Core Simulation
 	_initialize_game()
@@ -200,6 +205,31 @@ func _process(delta: float) -> void:
 			else:
 				style.border_color = Color(0.2, 0.85, 0.4, 0.8) # Green (OK)
 				style.bg_color = Color(0.2, 0.85, 0.4, 0.15)
+				
+	# Update Copy Placement Preview (MouseMode.COPY_BUILD)
+	elif current_mode == MouseMode.COPY_BUILD and is_instance_valid(input_controller) and not copy_data.is_empty():
+		var origin_grid = input_controller._get_copy_placement_origin_grid()
+		var b_list = copy_data.get("buildings", [])
+		var is_valid = true
+		for b in b_list:
+			var rel_pos: Vector2i = b["relative_pos"]
+			var b_size: Vector2i = b["size"]
+			var cell_pos = origin_grid + rel_pos
+			if not network.is_area_free(cell_pos, b_size):
+				is_valid = false
+				break
+				
+		var total_cost = copy_data.get("total_cost", {})
+		var can_afford = resource_manager.can_afford(total_cost) if not building_manager.free_buildings_mode else true
+		
+		input_controller.copy_preview_info = {
+			"buildings": b_list,
+			"bounds_size": copy_data.get("bounds_size", Vector2i(1, 1)),
+			"origin_grid": origin_grid,
+			"is_valid": is_valid and can_afford
+		}
+		
+		inspector_panel.update_multi_inspector(b_list.size(), total_cost, can_afford)
 			
 	# Auto-save
 	save_timer += delta
@@ -226,7 +256,6 @@ func _handle_build(grid_pos: Vector2i) -> void:
 	if not network.is_area_free(grid_pos, b_size):
 		return # Blocked
 
-		
 	if not building_manager.can_afford(selected_build_type):
 		return # Cannot afford
 		
@@ -238,8 +267,10 @@ func _handle_build(grid_pos: Vector2i) -> void:
 			network.sync_portal_inputs(milestones_manager)
 		_create_building_visual(b_data)
 		_update_ui()
-		# Remain in build mode for quick placements!
-
+		
+		# If Shift is NOT held, cancel build selection after 1 placement
+		if not Input.is_key_pressed(KEY_SHIFT):
+			_set_mouse_mode(MouseMode.INSPECT)
 
 var link_source_port: int = 0
 
@@ -347,6 +378,10 @@ func _set_mouse_mode(mode: MouseMode, build_type: String = "") -> void:
 	
 	# Show/hide build preview
 	build_preview.visible = (current_mode == MouseMode.BUILD)
+	if current_mode != MouseMode.COPY_BUILD:
+		copy_data.clear()
+		if is_instance_valid(input_controller):
+			input_controller.copy_preview_info.clear()
 	
 	# Sync state with InputController
 	if is_instance_valid(input_controller):
@@ -387,7 +422,6 @@ func _update_inspector() -> void:
 		inspector_panel.update_inspector_new(b_data, building_manager)
 	else:
 		pass # Ignore old inspector panel method until refactored
-
 
 func _on_recipe_selected(idx: int) -> void:
 	var b_data = network.buildings.get(selected_building_id)
@@ -430,6 +464,183 @@ func _on_input_building_move_completed() -> void:
 	SaveManager.save_game(network, resource_manager, building_manager, upgrades_manager, artifacts_manager, milestones_manager, template_manager)
 
 func _on_input_link_mode_cancelled() -> void:
+	_set_mouse_mode(MouseMode.INSPECT)
+
+func _on_input_selection_changed(ids: Array[int]) -> void:
+	if ids.size() == 1:
+		_handle_inspect(ids[0])
+	elif ids.size() > 1:
+		selected_building_id = 0
+		var total_cost: Dictionary = {}
+		var sim_counts: Dictionary = building_manager.building_counts.duplicate()
+		for b_id in ids:
+			var b_data = network.buildings.get(b_id)
+			if b_data:
+				var type = b_data.type
+				var count = sim_counts.get(type, 0)
+				var config: BuildingCostData = building_manager.cost_configs.get(type)
+				if config != null:
+					var cost = {}
+					if count == 0:
+						for res in config.base_costs: cost[res] = float(config.base_costs[res])
+					else:
+						var factor = pow(config.multiplier, count - 1)
+						for res in config.first_paid_costs: cost[res] = snappedf(float(config.first_paid_costs[res]) * factor, 0.1)
+					for res in cost:
+						total_cost[res] = total_cost.get(res, 0.0) + cost[res]
+				sim_counts[type] = count + 1
+		var can_afford = resource_manager.can_afford(total_cost) if not building_manager.free_buildings_mode else true
+		inspector_panel.update_multi_inspector(ids.size(), total_cost, can_afford)
+	else:
+		_handle_inspect(0)
+
+func _on_input_demolish_requested(ids: Array[int]) -> void:
+	for b_id in ids:
+		var building = network.buildings.get(b_id)
+		if building:
+			building_manager.refund_building(building.type)
+			if visuals_map.has(b_id):
+				visuals_map[b_id].queue_free()
+				visuals_map.erase(b_id)
+			network.remove_building(b_id)
+	selected_building_id = 0
+	if is_instance_valid(input_controller):
+		input_controller.set_selected_buildings([])
+	inspector_panel.visible = false
+	_update_ui()
+	SaveManager.save_game(network, resource_manager, building_manager, upgrades_manager, artifacts_manager, milestones_manager, template_manager)
+
+func _on_input_copy_requested(ids: Array[int]) -> void:
+	if ids.is_empty():
+		return
+		
+	# Filter out limited buildings (max_count >= 0)
+	var valid_ids: Array[int] = []
+	for b_id in ids:
+		var b_data = network.buildings.get(b_id)
+		if b_data:
+			var config: BuildingCostData = building_manager.cost_configs.get(b_data.type)
+			if config != null and config.max_count >= 0:
+				continue # Skip limited buildings
+			valid_ids.append(b_id)
+			
+	if valid_ids.is_empty():
+		return
+		
+	var min_cell = Vector2i(999999, 999999)
+	var max_cell = Vector2i(-999999, -999999)
+	for b_id in valid_ids:
+		var b_data = network.buildings[b_id]
+		min_cell.x = mini(min_cell.x, b_data.grid_position.x)
+		min_cell.y = mini(min_cell.y, b_data.grid_position.y)
+		var end_cell = b_data.grid_position + b_data.size_in_cells
+		max_cell.x = maxi(max_cell.x, end_cell.x)
+		max_cell.y = maxi(max_cell.y, end_cell.y)
+	var bounds_size = max_cell - min_cell
+	
+	var copied_buildings: Array = []
+	var id_to_index: Dictionary = {}
+	for i in range(valid_ids.size()):
+		var b_id = valid_ids[i]
+		id_to_index[b_id] = i
+		var b_data = network.buildings[b_id]
+		var rel_pos = b_data.grid_position - min_cell
+		copied_buildings.append({
+			"relative_pos": rel_pos,
+			"size": b_data.size_in_cells,
+			"type": b_data.type,
+			"recipe": b_data.active_recipe.duplicate(true)
+		})
+		
+	var inner_connections: Array = []
+	for conn in network.connections:
+		if id_to_index.has(conn["from_id"]) and id_to_index.has(conn["to_id"]):
+			inner_connections.append({
+				"from_index": id_to_index[conn["from_id"]],
+				"from_port": conn["from_port"],
+				"to_index": id_to_index[conn["to_id"]],
+				"to_port": conn["to_port"]
+			})
+			
+	# Calculate total cost
+	var total_cost: Dictionary = {}
+	var sim_counts: Dictionary = building_manager.building_counts.duplicate()
+	for b_info in copied_buildings:
+		var type = b_info["type"]
+		var count = sim_counts.get(type, 0)
+		var config: BuildingCostData = building_manager.cost_configs.get(type)
+		if config != null:
+			var cost = {}
+			if count == 0:
+				for res in config.base_costs: cost[res] = float(config.base_costs[res])
+			else:
+				var factor = pow(config.multiplier, count - 1)
+				for res in config.first_paid_costs: cost[res] = snappedf(float(config.first_paid_costs[res]) * factor, 0.1)
+			for res in cost:
+				total_cost[res] = total_cost.get(res, 0.0) + cost[res]
+		sim_counts[type] = count + 1
+		
+	var can_afford = resource_manager.can_afford(total_cost) if not building_manager.free_buildings_mode else true
+	
+	if not can_afford and not building_manager.free_buildings_mode:
+		inspector_panel.update_multi_inspector(copied_buildings.size(), total_cost, false)
+		return
+		
+	copy_data = {
+		"buildings": copied_buildings,
+		"connections": inner_connections,
+		"bounds_size": bounds_size,
+		"total_cost": total_cost
+	}
+	
+	_set_mouse_mode(MouseMode.COPY_BUILD)
+
+func _on_input_copy_placement_confirmed(target_origin_grid: Vector2i) -> void:
+	if current_mode != MouseMode.COPY_BUILD or copy_data.is_empty():
+		return
+		
+	var b_list = copy_data.get("buildings", [])
+	var total_cost = copy_data.get("total_cost", {})
+	
+	# Verify area free for all copied buildings
+	for b in b_list:
+		var rel_pos: Vector2i = b["relative_pos"]
+		var b_size: Vector2i = b["size"]
+		var cell_pos = target_origin_grid + rel_pos
+		if not network.is_area_free(cell_pos, b_size):
+			return # Cannot place
+			
+	var can_afford = resource_manager.can_afford(total_cost) if not building_manager.free_buildings_mode else true
+	if not can_afford:
+		return
+		
+	var new_building_ids: Array[int] = []
+	for b in b_list:
+		var type = b["type"]
+		var cell_pos = target_origin_grid + b["relative_pos"]
+		var recipe = b["recipe"].duplicate(true)
+		if building_manager.buy_building(type):
+			var b_data = network.add_building(type, cell_pos, recipe)
+			if type == "portal":
+				network.sync_portal_inputs(milestones_manager)
+			_create_building_visual(b_data)
+			new_building_ids.append(b_data.id)
+			
+	for conn in copy_data.get("connections", []):
+		var from_idx = conn["from_index"]
+		var to_idx = conn["to_index"]
+		if from_idx < new_building_ids.size() and to_idx < new_building_ids.size():
+			var from_id = new_building_ids[from_idx]
+			var to_id = new_building_ids[to_idx]
+			network.add_connection(from_id, to_id, conn["from_port"], conn["to_port"])
+			
+	_update_ui()
+	SaveManager.save_game(network, resource_manager, building_manager, upgrades_manager, artifacts_manager, milestones_manager, template_manager)
+	
+	if not Input.is_key_pressed(KEY_SHIFT):
+		_set_mouse_mode(MouseMode.INSPECT)
+
+func _on_input_copy_placement_cancelled() -> void:
 	_set_mouse_mode(MouseMode.INSPECT)
 
 # --- Template Management ---
