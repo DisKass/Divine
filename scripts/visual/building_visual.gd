@@ -265,17 +265,30 @@ func _update_ui() -> void:
 		progress_bar.value = data.production_progress
 		
 	# Update input and output buffer texts
+	var recipe_ctx = {"inputs": data.inputs, "outputs": data.outputs}
+	var in_count = BuildingData.get_input_ports_count(data.type, recipe_ctx)
+	var out_count = BuildingData.get_output_ports_count(data.type, recipe_ctx)
+
 	if data.type.begins_with("splitter"):
 		inputs_container.visible = false
 		outputs_container.visible = false
-	elif data.type.begins_with("seller"):
+	elif data.type.begins_with("seller") or out_count == 0:
 		inputs_container.visible = true
+		inputs_container.size_flags_stretch_ratio = 1.0
 		outputs_container.visible = false
 		_update_resource_list(inputs_container, data.inputs, data.input_limits, true)
 		_update_resource_list(outputs_container, {}, {}, false)
+	elif in_count == 0:
+		inputs_container.visible = false
+		outputs_container.visible = true
+		outputs_container.size_flags_stretch_ratio = 1.0
+		_update_resource_list(inputs_container, {}, {}, true)
+		_update_resource_list(outputs_container, data.outputs, data.output_limits, false)
 	else:
 		inputs_container.visible = true
 		outputs_container.visible = true
+		inputs_container.size_flags_stretch_ratio = float(max(1, in_count))
+		outputs_container.size_flags_stretch_ratio = float(max(1, out_count))
 		_update_resource_list(inputs_container, data.inputs, data.input_limits, true)
 		_update_resource_list(outputs_container, data.outputs, data.output_limits, false)
 	
@@ -341,9 +354,11 @@ func _update_resource_list(container: VBoxContainer, resources: Dictionary, limi
 			lbl.name = res
 			lbl.add_theme_font_size_override("font_size", 9)
 			lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT if is_input else HORIZONTAL_ALIGNMENT_RIGHT
+			lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 			lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 			lbl.clip_text = true
 			lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			lbl.size_flags_vertical = Control.SIZE_EXPAND_FILL
 			container.add_child(lbl)
 			
 	# Update text values

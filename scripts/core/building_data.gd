@@ -5,28 +5,28 @@ extends RefCounted
 ## Decoupled from Godot's visual representation for high-performance tick execution.
 
 const DEFAULT_SIZES: Dictionary = {
-	"miner": Vector2i(3, 2),
-	"smelter": Vector2i(4, 2),
-	"converter": Vector2i(4, 2),
-	"assembler": Vector2i(4, 3),
-	"extractor": Vector2i(4, 2),
-	"infuser": Vector2i(4, 3),
-	"portal": Vector2i(4, 3),
-	"seller": Vector2i(4, 2),
+	"miner": Vector2i(2, 2),
+	"smelter": Vector2i(3, 2),
+	"converter": Vector2i(3, 2),
+	"assembler": Vector2i(3, 3),
+	"extractor": Vector2i(3, 2),
+	"infuser": Vector2i(3, 3),
+	"portal": Vector2i(3, 3),
+	"seller": Vector2i(2, 2),
 	"splitter_2": Vector2i(1, 2),
 	"splitter_3": Vector2i(1, 2),
 	# Backwards compatibility
-	"miner_iron": Vector2i(3, 2),
-	"miner_coal": Vector2i(3, 2),
-	"miner_crystal": Vector2i(3, 2),
-	"crusher": Vector2i(4, 2),
-	"constructor": Vector2i(4, 2),
-	"alchemy_lab": Vector2i(4, 3),
-	"artifact_altar": Vector2i(4, 3)
+	"miner_iron": Vector2i(2, 2),
+	"miner_coal": Vector2i(2, 2),
+	"miner_crystal": Vector2i(2, 2),
+	"crusher": Vector2i(3, 2),
+	"constructor": Vector2i(3, 2),
+	"alchemy_lab": Vector2i(3, 3),
+	"artifact_altar": Vector2i(3, 3)
 }
 
 static func get_default_size(p_type: String) -> Vector2i:
-	return DEFAULT_SIZES.get(p_type, Vector2i(4, 2))
+	return DEFAULT_SIZES.get(p_type, Vector2i(3, 2))
 
 static func get_output_ports_count(p_type: String, p_recipe: Dictionary = {}) -> int:
 	match p_type:

@@ -4,6 +4,17 @@
 
 ---
 
+### [2026-07-23] 🚀 **`[Коммит]`** fix: Building footprint sizes and UI label alignment with port slots
+- **Conversation ID**: `680b60ad-c5b8-4987-b4eb-871f2df7ed9e`
+
+### Фактические изменения
+1. Обновлены габариты зданий: Miner и Seller переведены на размер 2x2 клетки, у всех остальных фабрик ширина уменьшена с 4 до 3 клеток (3x2 / 3x3), Splitters сохраняют 1x2.
+2. Обновлен словарь `BuildingData.DEFAULT_SIZES` и соответствующие `.tres` конфиги зданий.
+3. Реализовано пропорциональное деление высоты контейнеров `inputs_container` и `outputs_container` (`stretch_ratio`), соответствующее соотношению количества слотов `in_count : out_count`.
+4. Внедрено центрирование надписей по вертикали внутри слота (`VERTICAL_ALIGNMENT_CENTER`), за счет чего надписи ресурсов 1-в-1 выровнены по горизонтали с точками портов.
+
+---
+
 ### [2026-07-23] 🚀 **`[Коммит]`** fix: Port positioning, Seller UI cleanup, and splitter overlay rendering
 - **Conversation ID**: `680b60ad-c5b8-4987-b4eb-871f2df7ed9e`
 

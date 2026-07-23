@@ -5,7 +5,7 @@
 [resource]
 script = ExtResource("1_tysne")
 multiplier = 1.2
-size_in_cells = Vector2i(4, 3)
+size_in_cells = Vector2i(3, 3)
 base_costs = {
 "credits": 50.0
 }

@@ -4,7 +4,7 @@
 
 [resource]
 script = ExtResource("1_gmadj")
-size_in_cells = Vector2i(3, 2)
+size_in_cells = Vector2i(2, 2)
 first_paid_costs = {
 "credits": 10.0
 }
