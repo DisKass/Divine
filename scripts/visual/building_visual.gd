@@ -64,7 +64,21 @@ func setup(p_data: BuildingData, p_cell_size: int) -> void:
 	_update_ui()
 
 func _draw() -> void:
-	pass # Drawing is handled by Overlay Control on top of panel background
+	if data == null or data.type.begins_with("splitter"):
+		return
+
+	var recipe_ctx = {"inputs": data.inputs, "outputs": data.outputs}
+	var out_count = BuildingData.get_output_ports_count(data.type, recipe_ctx)
+	for i in range(out_count):
+		var pt = to_local(get_port_global_position(true, i))
+		draw_circle(pt, 5.0, Color(1.0, 0.85, 0.2, 0.9)) # Orange/Yellow output dot
+		draw_arc(pt, 5.0, 0, TAU, 16, Color.BLACK, 1.5)
+		
+	var in_count = BuildingData.get_input_ports_count(data.type, recipe_ctx)
+	for i in range(in_count):
+		var pt = to_local(get_port_global_position(false, i))
+		draw_circle(pt, 5.0, Color(0.3, 0.7, 1.0, 0.9)) # Blue input dot
+		draw_arc(pt, 5.0, 0, TAU, 16, Color.BLACK, 1.5)
 
 func _to_overlay_local(overlay: Control, global_pos: Vector2) -> Vector2:
 	return overlay.get_global_transform().affine_inverse() * global_pos
@@ -77,52 +91,27 @@ func _on_overlay_draw() -> void:
 	if overlay == null:
 		return
 		
-	# Minimalist visual representation for splitters (internal lines + flashing + next target highlight)
+	# Minimalist visual representation for splitters (internal lines + flashing + ports on top of panel)
 	if data.type.begins_with("splitter"):
 		var in_pt = _to_overlay_local(overlay, get_port_global_position(false, 0))
 		var out_count = BuildingData.get_output_ports_count(data.type)
-		var next_target_idx = (data.last_outgoing_conn_index % max(1, out_count)) if data != null else 0
-		
 		for i in range(out_count):
 			var out_pt = _to_overlay_local(overlay, get_port_global_position(true, i))
 			var is_flashing = (i < port_flash_timers.size() and port_flash_timers[i] > 0.0)
-			var is_next = (i == next_target_idx)
-			
 			if is_flashing:
 				var alpha = minf(1.0, port_flash_timers[i] / 0.15)
 				# Wide outer glow
 				overlay.draw_line(in_pt, out_pt, Color(1.0, 0.85, 0.2, alpha * 0.7), 6.0)
 				# Core bright line
 				overlay.draw_line(in_pt, out_pt, Color(1.0, 1.0, 0.7, alpha), 3.0)
-				overlay.draw_circle(out_pt, 5.5, Color(1.0, 0.9, 0.3, 1.0))
-				overlay.draw_arc(out_pt, 5.5, 0, TAU, 16, Color.BLACK, 1.5)
-			elif is_next:
-				# Highlighted next target line (width 3.0, alpha 0.4)
-				overlay.draw_line(in_pt, out_pt, Color(0.9, 0.8, 0.35, 0.4), 3.0)
-				overlay.draw_circle(out_pt, 5.0, Color(0.9, 0.8, 0.35, 0.65))
-				overlay.draw_arc(out_pt, 5.0, 0, TAU, 16, Color.BLACK, 1.5)
 			else:
-				# Neutral grey inactive line
-				overlay.draw_line(in_pt, out_pt, Color(0.3, 0.35, 0.4, 0.4), 1.5)
-				overlay.draw_circle(out_pt, 4.5, Color(0.6, 0.65, 0.7, 0.6))
-				overlay.draw_arc(out_pt, 4.5, 0, TAU, 16, Color.BLACK, 1.2)
+				overlay.draw_line(in_pt, out_pt, Color(0.35, 0.4, 0.45, 0.7), 2.0)
+				
+			overlay.draw_circle(out_pt, 5.0, Color(1.0, 0.85, 0.2, 0.9)) # Orange/Yellow output dot
+			overlay.draw_arc(out_pt, 5.0, 0, TAU, 16, Color.BLACK, 1.5)
 			
 		overlay.draw_circle(in_pt, 5.0, Color(0.3, 0.7, 1.0, 0.9)) # Blue input dot
 		overlay.draw_arc(in_pt, 5.0, 0, TAU, 16, Color.BLACK, 1.5)
-		return
-
-	var recipe_ctx = {"inputs": data.inputs, "outputs": data.outputs}
-	var out_count = BuildingData.get_output_ports_count(data.type, recipe_ctx)
-	for i in range(out_count):
-		var pt = _to_overlay_local(overlay, get_port_global_position(true, i))
-		overlay.draw_circle(pt, 5.0, Color(1.0, 0.85, 0.2, 0.9)) # Orange/Yellow output dot
-		overlay.draw_arc(pt, 5.0, 0, TAU, 16, Color.BLACK, 1.5)
-		
-	var in_count = BuildingData.get_input_ports_count(data.type, recipe_ctx)
-	for i in range(in_count):
-		var pt = _to_overlay_local(overlay, get_port_global_position(false, i))
-		overlay.draw_circle(pt, 5.0, Color(0.3, 0.7, 1.0, 0.9)) # Blue input dot
-		overlay.draw_arc(pt, 5.0, 0, TAU, 16, Color.BLACK, 1.5)
 
 func request_overlay_redraw() -> void:
 	queue_redraw()
@@ -208,12 +197,16 @@ func _create_ui() -> void:
 	# Top: Inputs list (Sequential vertical)
 	inputs_container = VBoxContainer.new()
 	inputs_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	inputs_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	inputs_container.alignment = BoxContainer.ALIGNMENT_CENTER
 	inputs_container.add_theme_constant_override("separation", 1)
 	vbox.add_child(inputs_container)
 	
 	# Bottom: Outputs list (Sequential vertical)
 	outputs_container = VBoxContainer.new()
 	outputs_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	outputs_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	outputs_container.alignment = BoxContainer.ALIGNMENT_CENTER
 	outputs_container.add_theme_constant_override("separation", 1)
 	vbox.add_child(outputs_container)
 	
@@ -272,8 +265,19 @@ func _update_ui() -> void:
 		progress_bar.value = data.production_progress
 		
 	# Update input and output buffer texts
-	_update_resource_list(inputs_container, data.inputs, data.input_limits, true)
-	_update_resource_list(outputs_container, data.outputs, data.output_limits, false)
+	if data.type.begins_with("splitter"):
+		inputs_container.visible = false
+		outputs_container.visible = false
+	elif data.type.begins_with("seller"):
+		inputs_container.visible = true
+		outputs_container.visible = false
+		_update_resource_list(inputs_container, data.inputs, data.input_limits, true)
+		_update_resource_list(outputs_container, {}, {}, false)
+	else:
+		inputs_container.visible = true
+		outputs_container.visible = true
+		_update_resource_list(inputs_container, data.inputs, data.input_limits, true)
+		_update_resource_list(outputs_container, data.outputs, data.output_limits, false)
 	
 	# Update glow/borders based on selection, hover, and invalid drag
 	var style = panel.get_theme_stylebox("panel") as StyleBoxFlat
@@ -394,16 +398,7 @@ func get_port_global_position(is_output: bool, port_idx: int) -> Vector2:
 		
 	port_idx = clamp(port_idx, 0, total_ports - 1)
 	var side_x = half_width if is_output else -half_width
-	var target_container = outputs_container if is_output else inputs_container
-	
-	# Align port vertically with corresponding resource label if present
-	if is_instance_valid(target_container) and port_idx < target_container.get_child_count():
-		var child = target_container.get_child(port_idx) as Control
-		if is_instance_valid(child) and child.size.y > 0:
-			var port_y = child.global_position.y + child.size.y / 2.0
-			return Vector2(global_position.x + side_x, port_y)
-			
-	# Otherwise (splitters or empty lists), calculate position mathematically based on sequential entry slots
+	# Calculate position mathematically based on sequential entry slots
 	var header_height = float(cell_size) # 1 grid cell for header
 	var start_y = global_position.y - half_height + header_height
 	var end_y = global_position.y + half_height - 3.0 # 3px bottom padding
