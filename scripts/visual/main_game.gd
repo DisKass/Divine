@@ -35,6 +35,7 @@ var visuals_map: Dictionary = {}
 var camera: GameCamera
 var grid_renderer: GridRenderer
 var connection_renderer: ConnectionRenderer
+var building_renderer: BuildingRenderer
 var buildings_container: Node2D
 var build_preview: PanelContainer
 
@@ -52,7 +53,7 @@ var default_recipes: Dictionary = {}
 
 # Auto-save timer
 var save_timer: float = 0.0
-const AUTO_SAVE_INTERVAL: float = 5.0
+const AUTO_SAVE_INTERVAL: float = 30.0
 
 func _ready() -> void:
 	# Populate default recipes from Recipes database
@@ -73,6 +74,9 @@ func _ready() -> void:
 	
 	buildings_container = Node2D.new()
 	add_child(buildings_container)
+	
+	building_renderer = BuildingRenderer.new()
+	add_child(building_renderer)
 	
 	# 2. Setup build preview phantom
 	_create_build_preview()
@@ -182,13 +186,30 @@ func _initialize_game() -> void:
 	)
 	network.sync_portal_inputs(milestones_manager)
 
-	connection_renderer.setup(network, visuals_map)
+	building_renderer.setup(visuals_map, camera, cell_size)
+	connection_renderer.setup(network, visuals_map, camera)
 	if is_instance_valid(input_controller):
 		input_controller.setup(camera, network, visuals_map, build_preview)
 
 func _process(delta: float) -> void:
 	# Run simulation ticker ticks
 	ticker.process_realtime(delta)
+	
+	# Update frustum culling and visible counts for all building visuals
+	var visible_world_rect = camera.get_visible_world_rect(128.0) if is_instance_valid(camera) else Rect2(-99999, -99999, 199998, 199998)
+	var current_zoom = camera.zoom.x if is_instance_valid(camera) else 1.0
+	
+	var visible_count = 0
+	var total_count = visuals_map.size()
+	
+	for b_id in visuals_map:
+		var vis: BuildingVisual = visuals_map[b_id]
+		if is_instance_valid(vis):
+			if vis.update_culling(visible_world_rect, current_zoom):
+				visible_count += 1
+				
+	if is_instance_valid(hud) and hud.has_method("update_culling_stats"):
+		hud.update_culling_stats(visible_count, total_count)
 	
 	# Color red if blocked, green if empty and affordable (BUILD preview)
 	if current_mode == MouseMode.BUILD and is_instance_valid(input_controller):

@@ -4,6 +4,34 @@
 
 ---
 
+### [2026-07-24] 🚀 **`[Коммит]`** perf: Implement batched building rendering system reducing GPU draw calls from 4500 to 90
+- **Conversation ID**: `a8f5a050-f8f2-4b1a-afa3-c3d22ad91158`
+
+### Фактические изменения
+1. Создан централизованный узел `BuildingRenderer` (`Node2D`), заменивший массивные иерархии UI Control-узлов у каждого здания единым пассом отрисовки с поддержкой Frustum Culling.
+2. Реализована строгая дискретная послойная модель отрисовки (Backgrounds -> Outlines -> Ports -> Progress Bars -> Splitter Lines -> Splitter Ports -> Text) для сохранения точной Z-глубины объектов.
+3. Отрисовка контуров рамок переведена на `draw_multiline` с упаковкой точек массива в 1 вызов на цвет, а порты переведены на текстурный атлас `_circle_texture`.
+4. В результате замера RenderDoc при ~1760 объектах количество вызовов отрисовки на GPU сократилось с 4500+ до 90 (рост FPS с 10-12 до 30 FPS).
+5. Класс `BuildingVisual` облегчен до контейнера состояний и параметров портов с сохранением 100% обратной совместимости API.
+
+---
+
+### [2026-07-24] 📋 **`[План]`** Переработка отрисовки зданий с поддержкой 2D Батчинга
+- **Conversation ID**: `a8f5a050-f8f2-4b1a-afa3-c3d22ad91158`
+- **Файл плана**: [2026-07-24_batched_building_rendering.md](file:///c:/MyThings/Projects/Godot/my-divine-with-antigravity-1/docs/plans/2026-07-24_batched_building_rendering.md)
+
+План нацелен на переработку системы отрисовки зданий с поддержкой 2D батчинга в Godot. Он включает создание единого узла `BuildingRenderer`, который выполняет пакетную отрисовку плашек, прогресс-баров, линий сплиттеров, портов и текста надписей за считанные вызовы отрисовки (Draw Calls). Класс `BuildingVisual` облегчается до контейнера состояния с сохранением полной обратной совместимости геометрии и методов API, а также поддержкой отсечения закадровых зданий по видимости камеры (Frustum Culling).
+
+---
+
+### [2026-07-23] 📋 **`[План]`** Оптимизация производительности для 2000+ зданий
+- **Conversation ID**: `41cafa6b-12e6-4226-940b-573f6f24ba89`
+- **Файл плана**: [2026-07-23_performance_optimization_2000_buildings.md](file:///c:/MyThings/Projects/Godot/my-divine-with-antigravity-1/docs/plans/2026-07-23_performance_optimization_2000_buildings.md)
+
+План нацелен на обеспечение стабильных 60 FPS при 2000+ зданиях и связях. Он включает внедрение Frustum Culling для выключения отрисовки и UI обновлений off-screen зданий и связей, переключение UI на событийные обновления (dirty flags) вместо кадровых, упрощение LOD при малом зуме, отсечение кадровых циклов hover в InputController и кэширование типов/рецептов для zero-allocation симуляции тиков в бэкенде.
+
+---
+
 ### [2026-07-23] 🚀 **`[Коммит]`** feat: Major building controls update (Shift building, Delete key demolish, Ctrl+LMB box selection, multi-drag, and Ctrl+C copy/paste)
 - **Conversation ID**: `f4388768-b389-4ca2-9354-8a874180f89b`
 

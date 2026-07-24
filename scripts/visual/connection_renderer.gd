@@ -21,16 +21,21 @@ class ResourcePacket:
 	var has_triggered_pulse: bool = false
 
 var network: FactoryNetwork
-var visuals_map: Dictionary = {} # building_id -> BuildingVisual
+var visuals_map: Dictionary = {}
 var active_packets: Array = []
+var camera: GameCamera
 
-func setup(p_network: FactoryNetwork, p_visuals_map: Dictionary) -> void:
+var _latest_arrival_time: Dictionary = {} # building_id -> arrival time in seconds
+
+func setup(p_network: FactoryNetwork, p_visuals_map: Dictionary, p_camera: GameCamera = null) -> void:
 	if is_instance_valid(network) and network.resource_transferred.is_connected(_on_resource_transferred):
 		network.resource_transferred.disconnect(_on_resource_transferred)
 		
 	network = p_network
 	visuals_map = p_visuals_map
+	camera = p_camera
 	active_packets.clear()
+	_latest_arrival_time.clear()
 	
 	if network != null:
 		network.resource_transferred.connect(_on_resource_transferred)
@@ -42,19 +47,20 @@ func _on_resource_transferred(from_id: int, from_port: int, to_id: int, to_port:
 	if not is_instance_valid(from_vis) or not is_instance_valid(to_vis):
 		return
 		
+	# Skip packet creation if both source and target buildings are off-screen
+	if not from_vis.visible and not to_vis.visible:
+		return
+		
 	var start_pt = from_vis.get_port_global_position(true, from_port)
 	var end_pt = to_vis.get_port_global_position(false, to_port)
 	var dist = start_pt.distance_to(end_pt)
 	if dist < 1.0:
 		return
 		
-	# Calculate delay if an incoming packet to from_id is currently traveling
-	var initial_delay = 0.0
-	for p in active_packets:
-		if p.to_id == from_id:
-			var rem_dist = maxf(0.0, p.max_travel_dist - p.progress)
-			var rem_time = rem_dist / p.speed if p.speed > 0.0 else 0.0
-			initial_delay = maxf(initial_delay, rem_time + p.delay)
+	# Fast O(1) delay calculation using latest arrival timestamp
+	var now = float(Time.get_ticks_msec()) * 0.001
+	var busy_until = float(_latest_arrival_time.get(from_id, 0.0))
+	var initial_delay = maxf(0.0, busy_until - now)
 			
 	var half_len = packet_length * 0.5
 	var packet = ResourcePacket.new()
@@ -67,6 +73,9 @@ func _on_resource_transferred(from_id: int, from_port: int, to_id: int, to_port:
 	packet.max_travel_dist = dist + half_len
 	packet.speed = (dist + packet_length) * maxf(transfer_rate, 0.1)
 	packet.delay = initial_delay
+	
+	var travel_duration = packet.max_travel_dist / packet.speed if packet.speed > 0.0 else 0.0
+	_latest_arrival_time[to_id] = now + initial_delay + travel_duration
 	
 	if initial_delay <= 0.0:
 		packet.has_triggered_pulse = true
@@ -103,7 +112,9 @@ func _draw() -> void:
 	if network == null or visuals_map.is_empty():
 		return
 		
-	# 1. Draw base connection pipe lines
+	var view_rect = camera.get_visible_world_rect(128.0) if is_instance_valid(camera) else Rect2(-99999, -99999, 199998, 199998)
+
+	# 1. Draw base connection pipe lines (with frustum culling)
 	for conn in network.connections:
 		var from_id = conn["from_id"]
 		var from_port = int(conn.get("from_port", 0))
@@ -116,12 +127,20 @@ func _draw() -> void:
 		if not is_instance_valid(from_vis) or not is_instance_valid(to_vis):
 			continue
 			
+		# Skip line drawing if both connected nodes are off-screen
+		if not from_vis.visible and not to_vis.visible:
+			continue
+			
 		var start_pt = from_vis.get_port_global_position(true, from_port)
 		var end_pt = to_vis.get_port_global_position(false, to_port)
 		
+		# Extra bounds check for long connections
+		if not view_rect.has_point(start_pt) and not view_rect.has_point(end_pt):
+			continue
+			
 		draw_line(start_pt, end_pt, line_color, line_width)
 		
-	# 2. Draw flying elongated resource segments
+	# 2. Draw flying elongated resource segments (with frustum culling)
 	for pkt in active_packets:
 		if pkt.delay > 0.0:
 			continue
@@ -129,6 +148,9 @@ func _draw() -> void:
 		var to_vis: BuildingVisual = visuals_map.get(pkt.to_id)
 		
 		if not is_instance_valid(from_vis) or not is_instance_valid(to_vis):
+			continue
+			
+		if not from_vis.visible and not to_vis.visible:
 			continue
 			
 		var start_pt = from_vis.get_port_global_position(true, pkt.from_port)

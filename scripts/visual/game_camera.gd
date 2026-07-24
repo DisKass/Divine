@@ -31,3 +31,15 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event is InputEventMouseMotion and is_panning:
 		# Drag amount is relative mouse movement, scaled by zoom so speed feels consistent
 		position -= event.relative / zoom.x
+
+## Returns exact camera viewport bounding rectangle in world space coordinates.
+func get_visible_world_rect(margin: float = 128.0) -> Rect2:
+	var viewport = get_viewport()
+	if viewport == null:
+		return Rect2(-99999, -99999, 199998, 199998)
+	var view_size = viewport.get_visible_rect().size
+	var current_zoom = maxf(zoom.x, 0.01)
+	var half_size = (view_size / current_zoom) * 0.5 + Vector2(margin, margin)
+	var min_pos = global_position - half_size
+	var size = half_size * 2.0
+	return Rect2(min_pos, size)

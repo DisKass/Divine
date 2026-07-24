@@ -39,7 +39,28 @@ const BUILDING_DESCRIPTIONS: Dictionary = {
 	"splitter_3": "Split 3 Outputs"
 }
 
+var fps_label: Label
+var _last_visible_count: int = 0
+var _last_total_count: int = 0
+
+func update_culling_stats(visible_count: int, total_count: int) -> void:
+	_last_visible_count = visible_count
+	_last_total_count = total_count
+
 func _ready() -> void:
+	# Create real-time FPS counter in top panel
+	fps_label = Label.new()
+	fps_label.name = "FPSLabel"
+	fps_label.add_theme_font_size_override("font_size", 13)
+	fps_label.add_theme_color_override("font_color", Color(0.4, 0.9, 0.4))
+	fps_label.add_theme_color_override("font_outline_color", Color.BLACK)
+	fps_label.add_theme_constant_override("outline_size", 3)
+	fps_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	var top_hbox = get_node_or_null("TopPanel/HBoxContainer")
+	if top_hbox:
+		top_hbox.add_child(fps_label)
+		top_hbox.move_child(fps_label, 1) # Insert right after Margin1
+
 	# Load panels
 	var shop_scene = preload("res://scenes/shop_panel.tscn")
 	shop_panel = shop_scene.instantiate()
@@ -70,6 +91,22 @@ func _ready() -> void:
 	
 	scroll_container.gui_input.connect(_on_scroll_gui_input)
 	_create_build_buttons()
+
+func _process(_delta: float) -> void:
+	if is_instance_valid(fps_label):
+		var fps = Engine.get_frames_per_second()
+		var culled = max(0, _last_total_count - _last_visible_count)
+		if _last_total_count > 0:
+			fps_label.text = "FPS: %d | Visible: %d/%d (Culled: %d)" % [fps, _last_visible_count, _last_total_count, culled]
+		else:
+			fps_label.text = "FPS: %d" % fps
+			
+		if fps >= 55:
+			fps_label.add_theme_color_override("font_color", Color(0.4, 0.9, 0.4))
+		elif fps >= 30:
+			fps_label.add_theme_color_override("font_color", Color(0.9, 0.8, 0.2))
+		else:
+			fps_label.add_theme_color_override("font_color", Color(0.95, 0.3, 0.3))
 
 func _create_build_buttons() -> void:
 	var card_types = ["portal", "miner", "smelter", "converter", "assembler", "extractor", "infuser", "seller", "splitter_2", "splitter_3"]

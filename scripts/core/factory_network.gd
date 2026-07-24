@@ -228,7 +228,7 @@ func tick(delta: float = 1.0, resource_mgr: ResourceManager = null, modifier_mgr
 		
 	# 1. Tick all building processes
 	for b in _buildings_list:
-		var speed_mult = miner_speed_mult if b.type.begins_with("miner") else factory_speed_mult
+		var speed_mult = miner_speed_mult if b.is_miner else factory_speed_mult
 		b.tick(delta, speed_mult)
 		
 	# Reset transfer activity flags on connections
@@ -258,17 +258,17 @@ func tick(delta: float = 1.0, resource_mgr: ResourceManager = null, modifier_mgr
 			var to_port: int = cache[4]
 			
 			var resources: Array[String] = []
-			if to_b.type == "portal" or to_b.type.begins_with("splitter"):
+			if to_b.is_portal or to_b.is_splitter:
 				for res in from_b.outputs.keys():
 					if res.begins_with("_"): continue
-					if to_b.type == "portal":
+					if to_b.is_portal:
 						if to_b.input_limits.has(res):
 							resources.append(res)
 					else:
 						to_b.inputs[res] = to_b.inputs.get(res, 0.0)
-						to_b.input_limits[res] = 1.0 if to_b.type.begins_with("splitter") else maxf(to_b.input_limits.get(res, 20.0), 20.0)
+						to_b.input_limits[res] = 1.0 if to_b.is_splitter else maxf(to_b.input_limits.get(res, 20.0), 20.0)
 						resources.append(res)
-			elif from_b.type.begins_with("splitter"):
+			elif from_b.is_splitter:
 				for res in from_b.outputs.keys():
 					if res.begins_with("_"): continue
 					if to_b.inputs.has(res) or to_b.active_recipe.get("inputs", {}).has(res):
@@ -301,7 +301,7 @@ func tick(delta: float = 1.0, resource_mgr: ResourceManager = null, modifier_mgr
 						continue
 						
 					var target_current = to_b.inputs.get(res, 0.0)
-					if to_b.type.begins_with("splitter"):
+					if to_b.is_splitter:
 						target_current += to_b.outputs.get(res, 0.0)
 					var target_limit = to_b.input_limits.get(res, 20.0)
 					var space_units = floori(target_limit - target_current)
@@ -313,6 +313,8 @@ func tick(delta: float = 1.0, resource_mgr: ResourceManager = null, modifier_mgr
 					if units_to_move > 0:
 						from_b.outputs[res] -= float(units_to_move)
 						to_b.inputs[res] += float(units_to_move)
+						from_b.ui_version += 1
+						to_b.ui_version += 1
 						total_transferred += units_to_move
 						conn_dict["is_active"] = true
 						conn_dict["flow_rate"] = transfer_rate

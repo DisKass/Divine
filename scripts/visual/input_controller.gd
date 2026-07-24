@@ -80,6 +80,8 @@ func set_selected_buildings(ids: Array[int]) -> void:
 		if is_instance_valid(visual):
 			visual.is_selected = (b_id in selected_building_ids)
 
+var _last_hovered_id: int = 0
+
 func _process(_delta: float) -> void:
 	if network == null:
 		return
@@ -93,15 +95,21 @@ func _process(_delta: float) -> void:
 		build_preview.size = target_size_px
 		build_preview.global_position = Vector2(grid_pos) * cell_size
 		
-	# Update hovered building state
+	# Update hovered building state only when hover target changes
 	var hover_building_id = _get_building_id_under_mouse()
-	for b_id in visuals_map:
-		var visual = visuals_map[b_id]
-		if is_instance_valid(visual):
-			if (_is_dragging_building and b_id == _dragged_building_id) or (_is_dragging_group and b_id in selected_building_ids):
-				visual.is_hovered = false
-			else:
-				visual.is_hovered = (b_id == hover_building_id)
+	if _is_dragging_building or _is_dragging_group:
+		hover_building_id = 0
+		
+	if hover_building_id != _last_hovered_id:
+		if _last_hovered_id != 0:
+			var prev_vis = visuals_map.get(_last_hovered_id)
+			if is_instance_valid(prev_vis):
+				prev_vis.is_hovered = false
+		if hover_building_id != 0:
+			var new_vis = visuals_map.get(hover_building_id)
+			if is_instance_valid(new_vis):
+				new_vis.is_hovered = true
+		_last_hovered_id = hover_building_id
 				
 	# Request redraw for temporary link line, box selection, or copy preview
 	queue_redraw()

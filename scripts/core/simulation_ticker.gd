@@ -26,10 +26,11 @@ func process_realtime(delta: float) -> void:
 	if not is_active or network == null or resource_manager == null:
 		return
 		
-	time_accumulator += delta
+	time_accumulator += minf(delta, 0.1)
 	var ticks_run = 0
 	var tick_step = 1.0 / 30.0
-	while time_accumulator >= tick_step:
+	var max_ticks_per_frame = 2
+	while time_accumulator >= tick_step and ticks_run < max_ticks_per_frame:
 		time_accumulator -= tick_step
 		network.tick(tick_step, resource_manager, modifier_manager, milestones_manager, artifacts_manager)
 		ticks_run += 1
