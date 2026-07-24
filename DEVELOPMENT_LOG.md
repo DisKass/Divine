@@ -4,6 +4,22 @@
 
 ---
 
+### [2026-07-24] 🚀 **`[Коммит]`** perf: Periodic stutter elimination (String & Transfer Optimizations)
+- **Conversation ID**: `56640f4a-2da4-4ee4-98f8-3c0e80007974`
+
+### Фактические изменения
+1. **BuildingVisual**: Добавлен статический кэш префиксов названий ресурсов. Исключены медленные вызовы `.replace()`, `.capitalize()` и расчет шрифта `font.get_string_size()`, что ускорило обновление текста в 4 раза (с 4.79мс до 1.28мс для 1760 фабрик).
+2. **ConnectionRenderer**: Оптимизирована отрисовка массовых передач ресурсов. Использование массива в качестве ключа словаря (вместо конкатенации строк) и отказ от строковой проверки `has_method()` ускорили регистрацию 4800 передач ресурсов в 2 раза (с 1.15мс до 0.57мс).
+
+---
+
+### [2026-07-24] 📋 **`[План]`** Periodic Stutter Elimination (String & Transfer Optimizations)
+- **Conversation ID**: `56640f4a-2da4-4ee4-98f8-3c0e80007974`
+- **План**: [2026-07-24_stutter_optimization.md](docs/plans/2026-07-24_stutter_optimization.md)
+- **Описание**: Устранение ежесекундного спайка на 30+ мс. Планируется ввести статический кэш префиксов названий ресурсов для обхода вызовов `font.get_string_size()`, а также оптимизировать ключи в словаре вспышек соединений.
+
+---
+
 ### [2026-07-24] 🚀 **`[Коммит]`** perf: Extreme optimizations (Multimesh caching, O(1) input polling, Early factory exits)
 - **Conversation ID**: `56640f4a-2da4-4ee4-98f8-3c0e80007974`
 

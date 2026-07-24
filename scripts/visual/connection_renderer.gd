@@ -40,10 +40,9 @@ func _on_resource_transferred(from_id: int, from_port: int, to_id: int, to_port:
 		return
 		
 	# Trigger output port pulse on source visual
-	if from_vis.has_method("trigger_output_pulse"):
-		from_vis.trigger_output_pulse(from_port)
+	from_vis.trigger_output_pulse(from_port)
 		
-	var flash_key = "%d:%d_%d:%d" % [from_id, from_port, to_id, to_port]
+	var flash_key = [from_id, from_port, to_id, to_port]
 	active_flashes[flash_key] = {
 		"timer": 0.35,
 		"color": _get_resource_color(resource_name),

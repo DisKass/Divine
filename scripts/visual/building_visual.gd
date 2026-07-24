@@ -138,22 +138,31 @@ var _cached_in_multiline_str: String = ""
 var _cached_out_multiline_str: String = ""
 var _last_ui_version: int = -1
 
-static func format_resource_line(short_name: String, val: int, max_width: float, font: Font, font_size: int = 9) -> String:
-	var suffix = ": %d" % val
-	var full_str = "%s%s" % [short_name, suffix]
-	if font == null or max_width <= 0.0:
-		return full_str
+static var _resource_prefix_cache: Dictionary = {}
+
+static func format_resource_line(res_key: String, val: int, max_width: float, font: Font, font_size: int = 9) -> String:
+	var cache_key = "%s_%d" % [res_key, int(max_width)]
+	var prefix = _resource_prefix_cache.get(cache_key, "")
+	
+	if prefix == "":
+		var short_name = res_key.replace("iron_", "").replace("_", " ").capitalize()
+		var test_suffix = ": 9999"
+		var full_str = "%s%s" % [short_name, test_suffix]
 		
-	if font.get_string_size(full_str, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x <= max_width:
-		return full_str
+		if font == null or max_width <= 0.0 or font.get_string_size(full_str, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x <= max_width:
+			prefix = short_name
+		else:
+			var name_len = short_name.length()
+			prefix = "..."
+			for l in range(name_len - 1, 0, -1):
+				var candidate = "%s..." % short_name.substr(0, l)
+				if font.get_string_size(candidate + test_suffix, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x <= max_width:
+					prefix = candidate
+					break
+					
+		_resource_prefix_cache[cache_key] = prefix
 		
-	var name_len = short_name.length()
-	for l in range(name_len - 1, 0, -1):
-		var candidate = "%s...%s" % [short_name.substr(0, l), suffix]
-		if font.get_string_size(candidate, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x <= max_width:
-			return candidate
-			
-	return "...%s" % suffix
+	return "%s: %d" % [prefix, val]
 
 func update_text_cache() -> void:
 	if data == null:
@@ -174,14 +183,12 @@ func update_text_cache() -> void:
 	for k in data.inputs:
 		if not k.begins_with("_"):
 			var val = int(round(data.inputs[k]))
-			var short_name = k.replace("iron_", "").replace("_", " ").capitalize()
-			_cached_in_text_lines.append(format_resource_line(short_name, val, max_width, font, 9))
+			_cached_in_text_lines.append(format_resource_line(k, val, max_width, font, 9))
 			
 	for k in data.outputs:
 		if not k.begins_with("_") and k != "credits":
 			var val = int(round(data.outputs[k]))
-			var short_name = k.replace("iron_", "").replace("_", " ").capitalize()
-			_cached_out_text_lines.append(format_resource_line(short_name, val, max_width, font, 9))
+			_cached_out_text_lines.append(format_resource_line(k, val, max_width, font, 9))
 			
 	_cached_in_multiline_str = "\n".join(_cached_in_text_lines)
 	_cached_out_multiline_str = "\n".join(_cached_out_text_lines)
