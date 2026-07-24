@@ -4,6 +4,23 @@
 
 ---
 
+### [2026-07-24] 🚀 **`[Коммит]`** perf: Extreme optimizations (Multimesh caching, O(1) input polling, Early factory exits)
+- **Conversation ID**: `56640f4a-2da4-4ee4-98f8-3c0e80007974`
+
+### Фактические изменения
+1. **BuildingRenderer**: Убрано перестроение MultiMesh (подложки и порты) на каждом кадре мигания. Теперь GPU-буферы обновляются только по флагу изменения видимости камеры или смены зданий, сэкономив до 2.4 ms. Исправлен баг инвалидации кэша обводки зданий `culling_was_dirty`.
+2. **InputController**: O(N) обход всех зданий для проверки наведения мыши заменен на прямое чтение `network.grid` за O(1), что ускорило процесс с 1.21 ms до ~0.00 ms.
+3. **FactoryNetwork**: Внесен ранний выход из обработки логистики в тике для фабрик, не имеющих хотя бы 1 готовой единицы ресурса, что исключило избыточные переборы словарей.
+
+---
+
+### [2026-07-24] 📋 **`[План]`** Factory Network & Renderer Optimizations (Profiler Iteration 2)
+- **Conversation ID**: `56640f4a-2da4-4ee4-98f8-3c0e80007974`
+- **План**: [2026-07-24_profiler_optimizations_2.md](docs/plans/2026-07-24_profiler_optimizations_2.md)
+- **Описание**: Дальнейшая оптимизация узких мест по данным профайлера. Кэширование `MultiMesh` (до 2.4 ms экономии в `_draw`), замена обхода коллизий мыши на O(1) чтение из `network.grid` (до 1.2 ms в `InputController`) и быстрый выход из обработки соединений пустых зданий в `FactoryNetwork.tick`.
+
+---
+
 ### [2026-07-24] 🚀 **`[Коммит]`** perf: Rendering and simulation loop optimizations for high building count
 - **Conversation ID**: `8b254ae1-9b37-40d9-aad8-398cf9a28233`
 

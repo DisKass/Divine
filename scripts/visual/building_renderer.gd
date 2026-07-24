@@ -324,7 +324,9 @@ func _draw() -> void:
 	var is_low_lod = (current_zoom < 0.45)
 	
 	# Collect visible building visuals (Frustum Culling) only when dirty
+	var culling_was_dirty = false
 	if _culling_dirty or _last_visuals_count != visuals_map.size():
+		culling_was_dirty = true
 		_culling_dirty = false
 		_last_visuals_count = visuals_map.size()
 		_cached_visible_visuals.clear()
@@ -371,17 +373,18 @@ func _draw() -> void:
 			_splitter_out_ports_multimesh.visible_instance_count = 0
 		return
 
-	# Update MultiMesh GPU buffer for background panels (1 Draw Call!)
-	_update_panel_multimesh(visible_visuals)
-
-	# Update MultiMesh GPU buffers for pre-baked procedural ports
-	_update_std_ports_multimesh(std_visuals)
-	_update_splitter_ports_multimesh(splitter_visuals)
+	if culling_was_dirty:
+		# Update MultiMesh GPU buffer for background panels (1 Draw Call!)
+		_update_panel_multimesh(visible_visuals)
+	
+		# Update MultiMesh GPU buffers for pre-baked procedural ports
+		_update_std_ports_multimesh(std_visuals)
+		_update_splitter_ports_multimesh(splitter_visuals)
 
 	# =========================================================================
 	# LAYER 2: Building Borders / Outlines (Batched into 1 draw_multiline per color)
 	# =========================================================================
-	if _borders_dirty or _culling_dirty:
+	if _borders_dirty or culling_was_dirty:
 		_borders_dirty = false
 		_cached_border_groups.clear()
 		

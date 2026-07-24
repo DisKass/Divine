@@ -263,6 +263,16 @@ func tick(delta: float = 1.0, resource_mgr: ResourceManager = null, modifier_mgr
 			continue
 			
 		var from_b_first: BuildingData = outgoing_group[0][0]
+		
+		var has_any_output = false
+		for val in from_b_first.outputs.values():
+			if val >= 1.0:
+				has_any_output = true
+				break
+				
+		if not has_any_output:
+			continue
+			
 		var start_conn_idx = from_b_first.last_outgoing_conn_index % num_conns
 		
 		for c_step in range(num_conns):

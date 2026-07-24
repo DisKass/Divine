@@ -477,14 +477,12 @@ func _check_group_drag_validity(delta_grid: Vector2i) -> bool:
 
 func _get_building_id_under_mouse() -> int:
 	var m_pos = get_global_mouse_position()
-	for b_id in visuals_map:
-		var visual = visuals_map[b_id]
-		if is_instance_valid(visual) and visual.data != null:
-			var size_px = Vector2(visual.data.size_in_cells * cell_size)
-			var top_left = visual.global_position - size_px / 2.0
-			var rect = Rect2(top_left, size_px)
-			if rect.has_point(m_pos):
-				return b_id
+	var grid_pos = Vector2i(
+		floori(m_pos.x / cell_size),
+		floori(m_pos.y / cell_size)
+	)
+	if network != null and network.grid.has(grid_pos):
+		return network.grid[grid_pos]
 	return 0
 
 func _get_grid_position_under_mouse() -> Vector2i:
