@@ -142,18 +142,6 @@ func set_recipe(p_recipe: Dictionary) -> void:
 ## Simulates a single tick of duration `delta` (usually 1.0 second).
 func tick(delta: float = 1.0, speed_multiplier: float = 1.0) -> void:
 	if is_splitter:
-		for res in inputs.keys():
-			var amt = inputs[res]
-			if amt > 0.0:
-				var current_out = outputs.get(res, 0.0)
-				var space = maxf(0.0, 1.0 - current_out)
-				var to_transfer = minf(amt, space)
-				if to_transfer > 0.0:
-					outputs[res] = current_out + to_transfer
-					inputs[res] -= to_transfer
-					ui_version += 1
-				output_limits[res] = 1.0
-				input_limits[res] = 1.0
 		return
 
 	if active_recipe.is_empty():

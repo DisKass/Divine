@@ -23,6 +23,7 @@ var batch_mode: bool = false
 var _buildings_list: Array[BuildingData] = []
 var _connection_cache: Array = [] # Array of cached connection structures: [from_building, to_building, conn_dict, from_port, to_port]
 var _building_outgoing_conns: Array = []
+var _building_outgoing_conns_map: Dictionary = {}
 var _credits_producers: Array[BuildingData] = [] # Cache of buildings that output credits
 var _portals: Array[BuildingData] = [] # Cache of portal buildings
 var _altars: Array[BuildingData] = [] # Cache of altar buildings
@@ -193,8 +194,6 @@ func rebuild_caches() -> void:
 					if to_b.input_limits.has(res):
 						cached_res.append(res)
 				elif to_b.is_splitter:
-					to_b.inputs[res] = to_b.inputs.get(res, 0.0)
-					to_b.input_limits[res] = 1.0
 					cached_res.append(res)
 				elif from_b.is_splitter:
 					if to_b.inputs.has(res) or to_b.active_recipe.get("inputs", {}).has(res):
@@ -211,6 +210,7 @@ func rebuild_caches() -> void:
 				grouped_by_from[from_b.id] = []
 			grouped_by_from[from_b.id].append(cache_entry)
 			
+	_building_outgoing_conns_map = grouped_by_from
 	_building_outgoing_conns = grouped_by_from.values()
 
 ## Synchronizes inputs and limits for all Portal buildings to match active milestone requirements.
@@ -300,26 +300,30 @@ func tick(delta: float = 1.0, resource_mgr: ResourceManager = null, modifier_mgr
 				if available_units <= 0:
 					continue
 					
-				var target_current = to_b.inputs.get(res, 0.0)
 				if to_b.is_splitter:
-					target_current += to_b.outputs.get(res, 0.0)
-				var target_limit = to_b.input_limits.get(res, 20.0)
-				var space_units = floori(target_limit - target_current)
-				
-				if space_units <= 0:
-					continue
+					if _try_transfer_through_splitter(from_b, from_port, to_b, to_port, res, conn_dict):
+						from_b.last_outgoing_conn_index = (conn_idx + 1) % num_conns
+						conn_dict["last_res_index"] = (res_idx + 1) % num_res
+						break
+				else:
+					var target_current = to_b.inputs.get(res, 0.0)
+					var target_limit = to_b.input_limits.get(res, 20.0)
+					var space_units = floori(target_limit - target_current)
 					
-				var units_to_move = min(available_units, space_units)
-				if units_to_move > 0:
-					from_b.outputs[res] -= float(units_to_move)
-					to_b.inputs[res] += float(units_to_move)
-					from_b.ui_version += 1
-					to_b.ui_version += 1
-					conn_dict["is_active"] = true
-					conn_dict["last_res_index"] = (res_idx + 1) % num_res
-					from_b.last_outgoing_conn_index = (conn_idx + 1) % num_conns
-					resource_transferred.emit(from_b.id, from_port, to_b.id, to_port, res, float(units_to_move), 1.0)
-					break
+					if space_units <= 0:
+						continue
+						
+					var units_to_move = min(available_units, space_units)
+					if units_to_move > 0:
+						from_b.outputs[res] -= float(units_to_move)
+						to_b.inputs[res] += float(units_to_move)
+						from_b.ui_version += 1
+						to_b.ui_version += 1
+						conn_dict["is_active"] = true
+						conn_dict["last_res_index"] = (res_idx + 1) % num_res
+						from_b.last_outgoing_conn_index = (conn_idx + 1) % num_conns
+						resource_transferred.emit(from_b.id, from_port, to_b.id, to_port, res, float(units_to_move), 1.0)
+						break
 			
 	# 3. Harvest global credits from outputs, process Portal deliveries & collect crafted Artifacts
 	if resource_mgr != null:
@@ -406,3 +410,50 @@ func load_from_dict(dict: Dictionary) -> void:
 		})
 		
 	rebuild_caches()
+
+func _try_transfer_through_splitter(from_b: BuildingData, from_port: int, splitter_b: BuildingData, to_port: int, res: String, conn_dict: Dictionary, visited_splitters: Array[int] = []) -> bool:
+	if splitter_b.id in visited_splitters:
+		return false
+	visited_splitters.append(splitter_b.id)
+	
+	var outgoing: Array = _building_outgoing_conns_map.get(splitter_b.id, [])
+	var num_conns = outgoing.size()
+	if num_conns == 0:
+		return false
+		
+	var start_conn_idx = splitter_b.last_outgoing_conn_index % num_conns
+	
+	for c_step in range(num_conns):
+		var conn_idx = (start_conn_idx + c_step) % num_conns
+		var cache = outgoing[conn_idx]
+		
+		var target_b: BuildingData = cache[1]
+		var target_conn_dict: Dictionary = cache[2]
+		var sp_from_port: int = cache[3]
+		var target_to_port: int = cache[4]
+		
+		if target_b.is_splitter:
+			if _try_transfer_through_splitter(from_b, from_port, target_b, target_to_port, res, conn_dict, visited_splitters):
+				splitter_b.last_outgoing_conn_index = (conn_idx + 1) % num_conns
+				resource_transferred.emit(splitter_b.id, sp_from_port, target_b.id, target_to_port, res, 1.0, 1.0)
+				target_conn_dict["is_active"] = true
+				return true
+		else:
+			var target_current = target_b.inputs.get(res, 0.0)
+			var target_limit = target_b.input_limits.get(res, 20.0)
+			var space_units = floori(target_limit - target_current)
+			if space_units > 0:
+				from_b.outputs[res] -= 1.0
+				target_b.inputs[res] = target_current + 1.0
+				from_b.ui_version += 1
+				target_b.ui_version += 1
+				
+				splitter_b.last_outgoing_conn_index = (conn_idx + 1) % num_conns
+				conn_dict["is_active"] = true
+				target_conn_dict["is_active"] = true
+				
+				resource_transferred.emit(from_b.id, from_port, splitter_b.id, to_port, res, 1.0, 1.0)
+				resource_transferred.emit(splitter_b.id, sp_from_port, target_b.id, target_to_port, res, 1.0, 1.0)
+				return true
+				
+	return false
