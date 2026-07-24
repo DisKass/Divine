@@ -79,8 +79,8 @@ func setup(p_camera: GameCamera, p_network: FactoryNetwork, p_visuals_map: Dicti
 func _request_renderers_redraw() -> void:
 	if is_instance_valid(building_renderer):
 		building_renderer.mark_culling_dirty()
-	if is_instance_valid(connection_renderer):
-		connection_renderer.queue_redraw()
+	if is_instance_valid(connection_renderer) and connection_renderer.has_method("mark_lines_dirty"):
+		connection_renderer.mark_lines_dirty()
 
 func set_selected_buildings(ids: Array[int]) -> void:
 	selected_building_ids.clear()

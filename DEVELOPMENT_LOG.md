@@ -4,6 +4,21 @@
 
 ---
 
+### [2026-07-24] 🚀 **`[Коммит]`** perf: Rendering and simulation loop optimizations for high building count
+- **Conversation ID**: `8b254ae1-9b37-40d9-aad8-398cf9a28233`
+
+### Фактические изменения
+1. **FactoryNetwork**: Предрассчет допустимых ресурсов для пересылки в `rebuild_caches()`. Устранено распределение памяти и строковые сравнения в частом цикле `tick`.
+2. **ConnectionRenderer**: Кэширование геометрии труб в `PackedVector2Array` с обновлением при изменениях связей или перемещении зданий.
+3. **BuildingRenderer**: Слияние циклов (loop fusion) отрисовки прогресс-баров и кэширование геометрии рамок зданий с корректной инвалидацией при перемещении и движении камеры.
+
+---
+
+### [2026-07-24] 📋 **`[План]`** Rendering & Simulation Optimization
+- **Conversation ID**: `8b254ae1-9b37-40d9-aad8-398cf9a28233`
+- **План**: [2026-07-24_rendering_and_simulation_optimization.md](docs/plans/2026-07-24_rendering_and_simulation_optimization.md)
+- **Описание**: Оптимизация `FactoryNetwork.tick` (предварительное вычисление списка ресурсов на перенос в кэш), `ConnectionRenderer._draw` (кэширование точек труб в PackedVector2Array) и `BuildingRenderer._draw` (слияние циклов обхода, кэширование геометрии границ зданий). Цель: сокращение цикла обработки до < 6 мс.
+
 ### [2026-07-24] 🚀 **`[Коммит]`** fix: Real-time connection line redrawing during building drag-and-drop movement
 - **Conversation ID**: `c30c9204-294e-46ea-afc2-89bd5a019e10`
 

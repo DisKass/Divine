@@ -185,7 +185,27 @@ func rebuild_caches() -> void:
 		var to_port = int(conn.get("to_port", 0))
 		
 		if from_b and to_b:
-			var cache_entry = [from_b, to_b, conn, from_port, to_port]
+			var cached_res: Array[String] = []
+			for res in from_b.outputs.keys():
+				if res.begins_with("_"):
+					continue
+				if to_b.is_portal:
+					if to_b.input_limits.has(res):
+						cached_res.append(res)
+				elif to_b.is_splitter:
+					to_b.inputs[res] = to_b.inputs.get(res, 0.0)
+					to_b.input_limits[res] = 1.0
+					cached_res.append(res)
+				elif from_b.is_splitter:
+					if to_b.inputs.has(res) or to_b.active_recipe.get("inputs", {}).has(res):
+						to_b.inputs[res] = to_b.inputs.get(res, 0.0)
+						to_b.input_limits[res] = maxf(to_b.input_limits.get(res, 20.0), 20.0)
+						cached_res.append(res)
+				else:
+					if to_b.inputs.has(res):
+						cached_res.append(res)
+						
+			var cache_entry = [from_b, to_b, conn, from_port, to_port, cached_res]
 			_connection_cache.append(cache_entry)
 			if not grouped_by_from.has(from_b.id):
 				grouped_by_from[from_b.id] = []
@@ -254,30 +274,7 @@ func tick(delta: float = 1.0, resource_mgr: ResourceManager = null, modifier_mgr
 			var conn_dict: Dictionary = cache[2]
 			var from_port: int = cache[3]
 			var to_port: int = cache[4]
-			
-			var resources: Array[String] = []
-			if to_b.is_portal or to_b.is_splitter:
-				for res in from_b.outputs.keys():
-					if res.begins_with("_"): continue
-					if to_b.is_portal:
-						if to_b.input_limits.has(res):
-							resources.append(res)
-					else:
-						to_b.inputs[res] = to_b.inputs.get(res, 0.0)
-						to_b.input_limits[res] = 1.0 if to_b.is_splitter else maxf(to_b.input_limits.get(res, 20.0), 20.0)
-						resources.append(res)
-			elif from_b.is_splitter:
-				for res in from_b.outputs.keys():
-					if res.begins_with("_"): continue
-					if to_b.inputs.has(res) or to_b.active_recipe.get("inputs", {}).has(res):
-						to_b.inputs[res] = to_b.inputs.get(res, 0.0)
-						to_b.input_limits[res] = maxf(to_b.input_limits.get(res, 20.0), 20.0)
-						resources.append(res)
-			else:
-				for res in from_b.outputs.keys():
-					if res.begins_with("_"): continue
-					if to_b.inputs.has(res):
-						resources.append(res)
+			var resources: Array[String] = cache[5]
 			
 			if resources.is_empty():
 				continue

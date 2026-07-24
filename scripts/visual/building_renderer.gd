@@ -22,7 +22,10 @@ var _panel_texture: Texture2D
 var _last_camera_pos: Vector2 = Vector2.INF
 var _last_camera_zoom: float = -1.0
 var _culling_dirty: bool = true
+var _borders_dirty: bool = true
 var _last_visuals_count: int = -1
+
+var _cached_border_groups: Dictionary = {} # Color -> { width: float, pts: PackedVector2Array }
 
 var _cached_visible_visuals: Array[BuildingVisual] = []
 var _cached_std_visuals: Array[BuildingVisual] = []
@@ -46,6 +49,7 @@ var _splitter_out_ports_multimesh: MultiMesh
 
 func mark_culling_dirty() -> void:
 	_culling_dirty = true
+	_borders_dirty = true
 	queue_redraw()
 
 func _generate_baked_port_texture(inner_color: Color) -> Texture2D:
@@ -187,11 +191,13 @@ func _process(delta: float) -> void:
 			_last_camera_pos = camera.position
 			_last_camera_zoom = camera.zoom.x
 			_culling_dirty = true
+			_borders_dirty = true
 			needs_redraw = true
 			
 	if visuals_map.size() != _last_visuals_count:
 		_last_visuals_count = visuals_map.size()
 		_culling_dirty = true
+		_borders_dirty = true
 		needs_redraw = true
 			
 	# Process timers only on flashing visuals
@@ -375,89 +381,82 @@ func _draw() -> void:
 	# =========================================================================
 	# LAYER 2: Building Borders / Outlines (Batched into 1 draw_multiline per color)
 	# =========================================================================
-	var border_groups: Dictionary = {} # Color -> Dictionary { "rects": Array[Rect2], "width": float }
-	
-	for vis in visible_visuals:
-		var size_px = Vector2(vis.data.size_in_cells * vis.cell_size)
-		var top_left = vis.global_position - size_px / 2.0
-		var rect = Rect2(top_left, size_px)
+	if _borders_dirty or _culling_dirty:
+		_borders_dirty = false
+		_cached_border_groups.clear()
 		
-		var border_color = vis.accent_color.darkened(0.3)
-		var border_width = 2.0
-		
-		if vis.is_invalid_drag:
-			border_color = Color(0.9, 0.25, 0.25)
-			border_width = 3.0
-		elif vis.is_selected:
-			border_color = Color(1.0, 0.9, 0.3)
-			border_width = 3.0
-		elif vis.is_hovered:
-			border_color = vis.accent_color.lightened(0.2)
-			border_width = 2.0
+		var temp_groups: Dictionary = {}
+		for vis in visible_visuals:
+			var size_px = Vector2(vis.data.size_in_cells * vis.cell_size)
+			var top_left = vis.global_position - size_px / 2.0
+			var rect = Rect2(top_left, size_px)
 			
-		if not border_groups.has(border_color):
-			border_groups[border_color] = { "rects": [], "width": border_width }
-		(border_groups[border_color]["rects"] as Array).append(rect)
-		
-	# Draw each color group using a single draw_multiline call
-	for col in border_groups:
-		var group = border_groups[col]
-		var col_rects: Array = group["rects"]
-		var width: float = group["width"]
-		
-		var pts = PackedVector2Array()
-		pts.resize(col_rects.size() * 8)
-		var idx = 0
-		for r in col_rects:
-			var tl = r.position
-			var tr = Vector2(r.end.x, r.position.y)
-			var br = r.end
-			var bl = Vector2(r.position.x, r.end.y)
+			var border_color = vis.accent_color.darkened(0.3)
+			var border_width = 2.0
 			
-			pts[idx] = tl;     pts[idx + 1] = tr
-			pts[idx + 2] = tr; pts[idx + 3] = br
-			pts[idx + 4] = br; pts[idx + 5] = bl
-			pts[idx + 6] = bl; pts[idx + 7] = tl
-			idx += 8
+			if vis.is_invalid_drag:
+				border_color = Color(0.9, 0.25, 0.25)
+				border_width = 3.0
+			elif vis.is_selected:
+				border_color = Color(1.0, 0.9, 0.3)
+				border_width = 3.0
+			elif vis.is_hovered:
+				border_color = vis.accent_color.lightened(0.2)
+				border_width = 2.0
+				
+			if not temp_groups.has(border_color):
+				temp_groups[border_color] = { "rects": [], "width": border_width }
+			(temp_groups[border_color]["rects"] as Array).append(rect)
 			
-		draw_multiline(pts, col, width)
+		for col in temp_groups:
+			var group = temp_groups[col]
+			var col_rects: Array = group["rects"]
+			var width: float = group["width"]
+			
+			var pts = PackedVector2Array()
+			pts.resize(col_rects.size() * 8)
+			var idx = 0
+			for r in col_rects:
+				var tl = r.position
+				var tr = Vector2(r.end.x, r.position.y)
+				var br = r.end
+				var bl = Vector2(r.position.x, r.end.y)
+				
+				pts[idx] = tl;     pts[idx + 1] = tr
+				pts[idx + 2] = tr; pts[idx + 3] = br
+				pts[idx + 4] = br; pts[idx + 5] = bl
+				pts[idx + 6] = bl; pts[idx + 7] = tl
+				idx += 8
+			_cached_border_groups[col] = { "width": width, "pts": pts }
+			
+	for col in _cached_border_groups:
+		var group = _cached_border_groups[col]
+		draw_multiline(group["pts"], col, group["width"])
 
 	# =========================================================================
 	# LAYER 3: Progress Bars (Standard Buildings)
 	# =========================================================================
 	if not is_low_lod:
-		# 3A: Progress Bar Backgrounds
 		var pb_bg_color = Color(0.04, 0.05, 0.06, 1.0)
 		for vis in std_visuals:
 			var data = vis.data
 			if data.is_portal or data.active_recipe.is_empty():
 				continue
+				
+			var duration = float(data._cached_duration)
 			var size_px = Vector2(data.size_in_cells * vis.cell_size)
 			var top_left = vis.global_position - size_px / 2.0
 			var bar_margin_x = 4.0
 			var bar_y = top_left.y + 18.0
 			var bar_width = size_px.x - bar_margin_x * 2.0
+			
 			if bar_width > 4.0:
 				draw_rect(Rect2(top_left.x + bar_margin_x, bar_y, bar_width, 5.0), pb_bg_color, true)
 				
-		# 3B: Progress Bar Fills
-		for vis in std_visuals:
-			var data = vis.data
-			if data.is_portal or data.active_recipe.is_empty():
-				continue
-			var duration = float(data._cached_duration)
-			if duration <= 0.0:
-				continue
-			var fill_ratio = clampf(data.production_progress / duration, 0.0, 1.0)
-			if fill_ratio <= 0.0:
-				continue
-			var size_px = Vector2(data.size_in_cells * vis.cell_size)
-			var top_left = vis.global_position - size_px / 2.0
-			var bar_margin_x = 4.0
-			var bar_y = top_left.y + 18.0
-			var bar_width = size_px.x - bar_margin_x * 2.0
-			if bar_width > 4.0:
-				draw_rect(Rect2(top_left.x + bar_margin_x, bar_y, bar_width * fill_ratio, 5.0), vis.accent_color, true)
+				if duration > 0.0:
+					var fill_ratio = clampf(data.production_progress / duration, 0.0, 1.0)
+					if fill_ratio > 0.0:
+						draw_rect(Rect2(top_left.x + bar_margin_x, bar_y, bar_width * fill_ratio, 5.0), vis.accent_color, true)
 
 	# =========================================================================
 	# LAYER 4: Internal Lines on Splitters

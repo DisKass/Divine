@@ -56,6 +56,13 @@ func _on_resource_transferred(from_id: int, from_port: int, to_id: int, to_port:
 
 var _last_camera_pos: Vector2 = Vector2.INF
 var _last_camera_zoom: float = -1.0
+var _cached_pipe_lines: PackedVector2Array = PackedVector2Array()
+var _lines_dirty: bool = true
+var _last_conn_count: int = -1
+
+func mark_lines_dirty() -> void:
+	_lines_dirty = true
+	queue_redraw()
 
 func _process(delta: float) -> void:
 	if network == null or visuals_map.is_empty():
@@ -68,6 +75,11 @@ func _process(delta: float) -> void:
 			_last_camera_pos = camera.position
 			_last_camera_zoom = camera.zoom.x
 			needs_redraw = true
+			
+	if network.connections.size() != _last_conn_count:
+		_last_conn_count = network.connections.size()
+		_lines_dirty = true
+		needs_redraw = true
 			
 	if not active_flashes.is_empty():
 		var keys_to_remove: Array = []
@@ -91,34 +103,29 @@ func _draw() -> void:
 		
 	var view_rect = camera.get_visible_world_rect(128.0) if is_instance_valid(camera) else Rect2(-99999, -99999, 199998, 199998)
 
-	# 1. Draw base connection pipe lines (with frustum culling, batched into 1 draw_multiline call)
-	var pipe_pts = PackedVector2Array()
-	for conn in network.connections:
-		var from_id = conn["from_id"]
-		var from_port = int(conn.get("from_port", 0))
-		var to_id = conn["to_id"]
-		var to_port = int(conn.get("to_port", 0))
-		
-		var from_vis: BuildingVisual = visuals_map.get(from_id)
-		var to_vis: BuildingVisual = visuals_map.get(to_id)
-		
-		if not is_instance_valid(from_vis) or not is_instance_valid(to_vis):
-			continue
+	if _lines_dirty:
+		_lines_dirty = false
+		_cached_pipe_lines.clear()
+		for conn in network.connections:
+			var from_id = conn["from_id"]
+			var from_port = int(conn.get("from_port", 0))
+			var to_id = conn["to_id"]
+			var to_port = int(conn.get("to_port", 0))
 			
-		if not from_vis.visible and not to_vis.visible:
-			continue
+			var from_vis: BuildingVisual = visuals_map.get(from_id)
+			var to_vis: BuildingVisual = visuals_map.get(to_id)
 			
-		var start_pt = from_vis.get_port_global_position(true, from_port)
-		var end_pt = to_vis.get_port_global_position(false, to_port)
-		
-		if not view_rect.has_point(start_pt) and not view_rect.has_point(end_pt):
-			continue
+			if not is_instance_valid(from_vis) or not is_instance_valid(to_vis):
+				continue
+				
+			var start_pt = from_vis.get_port_global_position(true, from_port)
+			var end_pt = to_vis.get_port_global_position(false, to_port)
 			
-		pipe_pts.append(start_pt)
-		pipe_pts.append(end_pt)
-		
-	if pipe_pts.size() > 0:
-		draw_multiline(pipe_pts, line_color, line_width)
+			_cached_pipe_lines.append(start_pt)
+			_cached_pipe_lines.append(end_pt)
+			
+	if _cached_pipe_lines.size() > 0:
+		draw_multiline(_cached_pipe_lines, line_color, line_width)
 
 	# 2. Draw instant connection flash highlights for active resource transfers (0.35s pulse timing)
 	for key in active_flashes:
