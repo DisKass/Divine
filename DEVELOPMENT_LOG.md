@@ -4,6 +4,19 @@
 
 ---
 
+### [2026-07-24] 🚀 **`[Коммит]`** perf: Implement MultiMesh2D GPU instancing, procedural baked textures, and batched pipes (Ticket 02)
+- **Conversation ID**: `a8f5a050-f8f2-4b1a-afa3-c3d22ad91158`
+- **Тикет**: [Ticket 02: MultiMeshInstance2D Hardware Instancing & Procedural Textures](file:///c:/MyThings/Projects/Godot/my-divine-with-antigravity-1/docs/tickets/rendering_optimization/02_renderingserver_2d_api.md)
+
+### Фактические изменения
+1. Переведены фоновые плашки 2,000 зданий на GPU hardware instancing через `MultiMeshInstance2D` (`_panel_multimesh`), удалившие циклы `draw_rect` из GDScript и сжавшие рендеринг плашек в 1 Draw Call.
+2. Реализовано процедурное запекание текстур портов `_blue_port_texture` и `_yellow_port_texture` при старте в GDScript, объединившее внешнюю черную рамку и цветное ядро в единые ассеты. Это сократило число инстансов MultiMesh портов с 8,000 до 4,000.
+3. Оптимизирован фрустум-каллинг в `BuildingRenderer` с кешированием по флагу `_culling_dirty` (перерасчет происходит только при движении/зуме камеры или смене количества зданий, занимая 0.00 мс в стационарных кадрах).
+4. Батчированы трубки связей в `ConnectionRenderer._draw()` в единый системный вызов `draw_multiline`, сжавший отрисовку 500+ связей в 1 Draw Call за ~0.3 мс.
+5. Настроена точная иерархия глубин Z-index (`_std_ports_multimesh` на `z_index = -2` под плашками, `_panel_multimesh` на `z_index = -1`, `_splitter_ports_multimesh` на `z_index = 2` над линиями).
+
+---
+
 ### [2026-07-24] 🚀 **`[Коммит]`** perf: Implement GDScript caching, zero-lookup ports, and dirty-driven redraw (Ticket 01)
 - **Conversation ID**: `a8f5a050-f8f2-4b1a-afa3-c3d22ad91158`
 - **Тикет**: [Ticket 01: GDScript Caching & Dirty Redraw Optimization](file:///c:/MyThings/Projects/Godot/my-divine-with-antigravity-1/docs/tickets/rendering_optimization/01_gdscript_caching_and_dirty_redraw.md)

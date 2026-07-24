@@ -114,7 +114,8 @@ func _draw() -> void:
 		
 	var view_rect = camera.get_visible_world_rect(128.0) if is_instance_valid(camera) else Rect2(-99999, -99999, 199998, 199998)
 
-	# 1. Draw base connection pipe lines (with frustum culling)
+	# 1. Draw base connection pipe lines (with frustum culling, batched into 1 draw_multiline call)
+	var pipe_pts = PackedVector2Array()
 	for conn in network.connections:
 		var from_id = conn["from_id"]
 		var from_port = int(conn.get("from_port", 0))
@@ -138,7 +139,11 @@ func _draw() -> void:
 		if not view_rect.has_point(start_pt) and not view_rect.has_point(end_pt):
 			continue
 			
-		draw_line(start_pt, end_pt, line_color, line_width)
+		pipe_pts.append(start_pt)
+		pipe_pts.append(end_pt)
+		
+	if pipe_pts.size() > 0:
+		draw_multiline(pipe_pts, line_color, line_width)
 		
 	# 2. Draw flying elongated resource segments (with frustum culling)
 	for pkt in active_packets:
