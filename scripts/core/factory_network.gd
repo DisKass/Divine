@@ -236,9 +236,7 @@ func tick(delta: float = 1.0, resource_mgr: ResourceManager = null, modifier_mgr
 		conn["is_active"] = false
 		conn["flow_rate"] = 0.0
 		
-	# 2. Distribute resources along connections (Round-Robin per source building)
-	var transfer_rate = 1.0 * (1.0 + logistics_bonus)
-
+	# 2. Distribute resources along connections (Instant transfer per tick)
 	for outgoing_group in _building_outgoing_conns:
 		var num_conns = outgoing_group.size()
 		if num_conns == 0:
@@ -284,49 +282,37 @@ func tick(delta: float = 1.0, resource_mgr: ResourceManager = null, modifier_mgr
 			if resources.is_empty():
 				continue
 
-			var cur_progress = float(conn_dict.get("transfer_progress", 0.0)) + transfer_rate * delta
-			var possible_units = floori(cur_progress)
+			var num_res = resources.size()
+			var start_res_idx = int(conn_dict.get("last_res_index", 0)) % num_res
 			
-			if possible_units >= 1:
-				var total_transferred = 0
-				var num_res = resources.size()
-				var start_res_idx = int(conn_dict.get("last_res_index", 0)) % num_res
+			for i in range(num_res):
+				var res_idx = (start_res_idx + i) % num_res
+				var res = resources[res_idx]
 				
-				for i in range(num_res):
-					var res_idx = (start_res_idx + i) % num_res
-					var res = resources[res_idx]
+				var available_units = floori(from_b.outputs.get(res, 0.0))
+				if available_units <= 0:
+					continue
 					
-					var available_units = floori(from_b.outputs.get(res, 0.0))
-					if available_units <= 0:
-						continue
-						
-					var target_current = to_b.inputs.get(res, 0.0)
-					if to_b.is_splitter:
-						target_current += to_b.outputs.get(res, 0.0)
-					var target_limit = to_b.input_limits.get(res, 20.0)
-					var space_units = floori(target_limit - target_current)
+				var target_current = to_b.inputs.get(res, 0.0)
+				if to_b.is_splitter:
+					target_current += to_b.outputs.get(res, 0.0)
+				var target_limit = to_b.input_limits.get(res, 20.0)
+				var space_units = floori(target_limit - target_current)
+				
+				if space_units <= 0:
+					continue
 					
-					if space_units <= 0:
-						continue
-						
-					var units_to_move = min(possible_units - total_transferred, min(available_units, space_units))
-					if units_to_move > 0:
-						from_b.outputs[res] -= float(units_to_move)
-						to_b.inputs[res] += float(units_to_move)
-						from_b.ui_version += 1
-						to_b.ui_version += 1
-						total_transferred += units_to_move
-						conn_dict["is_active"] = true
-						conn_dict["flow_rate"] = transfer_rate
-						conn_dict["last_res_index"] = (res_idx + 1) % num_res
-						from_b.last_outgoing_conn_index = (conn_idx + 1) % num_conns
-						resource_transferred.emit(from_b.id, from_port, to_b.id, to_port, res, float(units_to_move), transfer_rate)
-						if total_transferred >= possible_units:
-							break
-							
-				cur_progress -= float(total_transferred)
-						
-			conn_dict["transfer_progress"] = minf(cur_progress, 1.0)
+				var units_to_move = min(available_units, space_units)
+				if units_to_move > 0:
+					from_b.outputs[res] -= float(units_to_move)
+					to_b.inputs[res] += float(units_to_move)
+					from_b.ui_version += 1
+					to_b.ui_version += 1
+					conn_dict["is_active"] = true
+					conn_dict["last_res_index"] = (res_idx + 1) % num_res
+					from_b.last_outgoing_conn_index = (conn_idx + 1) % num_conns
+					resource_transferred.emit(from_b.id, from_port, to_b.id, to_port, res, float(units_to_move), 1.0)
+					break
 			
 	# 3. Harvest global credits from outputs, process Portal deliveries & collect crafted Artifacts
 	if resource_mgr != null:

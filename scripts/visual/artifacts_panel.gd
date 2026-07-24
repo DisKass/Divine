@@ -186,8 +186,6 @@ func update_panel() -> void:
 	if f_bonus > 0.001: summary_parts.append("+%.0f%% Factory Speed" % (f_bonus * 100.0))
 	var m_bonus = art_mgr.modifier_manager.get_multiplier("miner_speed") - 1.0
 	if m_bonus > 0.001: summary_parts.append("+%.0f%% Mining Speed" % (m_bonus * 100.0))
-	var l_bonus = art_mgr.modifier_manager.get_multiplier("logistics_transfer") - 1.0
-	if l_bonus > 0.001: summary_parts.append("+%.0f%% Logistics" % (l_bonus * 100.0))
 	var s_bonus = art_mgr.modifier_manager.get_multiplier("sell_price_mult") - 1.0
 	if s_bonus > 0.001: summary_parts.append("+%.0f%% Sell Income" % (s_bonus * 100.0))
 	

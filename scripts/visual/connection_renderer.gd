@@ -1,111 +1,73 @@
 extends Node2D
 class_name ConnectionRenderer
 
-## Draws connection lines between building visual nodes and animates discrete flying resource packets on transfers.
+## High-performance batched renderer for factory connection pipes.
+## Resource transfers instantly highlight connection lines with resource-colored flashes (0.15s pulse), eliminating packet lerping overhead.
 
 @export var line_color: Color = Color(0.2, 0.6, 0.9, 0.6) # Sleek transparent blue
 @export var line_width: float = 3.0
-@export var packet_length: float = 30.0 # Length of the flying elongated resource segment
-@export var packet_width: float = 5.0 # Width of the resource segment
-
-class ResourcePacket:
-	var from_id: int
-	var from_port: int
-	var to_id: int
-	var to_port: int
-	var resource_name: String
-	var progress: float = 0.0 # Center position in pixels along travel path
-	var max_travel_dist: float = 0.0
-	var speed: float = 1.0
-	var delay: float = 0.0
-	var has_triggered_pulse: bool = false
 
 var network: FactoryNetwork
 var visuals_map: Dictionary = {}
-var active_packets: Array = []
 var camera: GameCamera
 
-var _latest_arrival_time: Dictionary = {} # building_id -> arrival time in seconds
+# Active connection flashes: "from_id:from_port_to_id:to_port" -> Dictionary
+var active_flashes: Dictionary = {}
 
 func setup(p_network: FactoryNetwork, p_visuals_map: Dictionary, p_camera: GameCamera = null) -> void:
+	z_as_relative = false
+	z_index = 1 # Render connection pipes completely behind building ports (2) and panels (3)
 	if is_instance_valid(network) and network.resource_transferred.is_connected(_on_resource_transferred):
 		network.resource_transferred.disconnect(_on_resource_transferred)
 		
 	network = p_network
 	visuals_map = p_visuals_map
 	camera = p_camera
-	active_packets.clear()
-	_latest_arrival_time.clear()
+	active_flashes.clear()
 	
 	if network != null:
 		network.resource_transferred.connect(_on_resource_transferred)
 
-func _on_resource_transferred(from_id: int, from_port: int, to_id: int, to_port: int, resource_name: String, _amount: float, transfer_rate: float) -> void:
+func _on_resource_transferred(from_id: int, from_port: int, to_id: int, to_port: int, resource_name: String, _amount: float, _transfer_rate: float) -> void:
 	var from_vis: BuildingVisual = visuals_map.get(from_id)
 	var to_vis: BuildingVisual = visuals_map.get(to_id)
 	
 	if not is_instance_valid(from_vis) or not is_instance_valid(to_vis):
 		return
 		
-	# Skip packet creation if both source and target buildings are off-screen
+	# Skip flash if both source and target buildings are off-screen
 	if not from_vis.visible and not to_vis.visible:
 		return
 		
-	var start_pt = from_vis.get_port_global_position(true, from_port)
-	var end_pt = to_vis.get_port_global_position(false, to_port)
-	var dist = start_pt.distance_to(end_pt)
-	if dist < 1.0:
-		return
+	# Trigger output port pulse on source visual
+	if from_vis.has_method("trigger_output_pulse"):
+		from_vis.trigger_output_pulse(from_port)
 		
-	# Fast O(1) delay calculation using latest arrival timestamp
-	var now = float(Time.get_ticks_msec()) * 0.001
-	var busy_until = float(_latest_arrival_time.get(from_id, 0.0))
-	var initial_delay = maxf(0.0, busy_until - now)
-			
-	var half_len = packet_length * 0.5
-	var packet = ResourcePacket.new()
-	packet.from_id = from_id
-	packet.from_port = from_port
-	packet.to_id = to_id
-	packet.to_port = to_port
-	packet.resource_name = resource_name
-	packet.progress = -half_len
-	packet.max_travel_dist = dist + half_len
-	packet.speed = (dist + packet_length) * maxf(transfer_rate, 0.1)
-	packet.delay = initial_delay
-	
-	var travel_duration = packet.max_travel_dist / packet.speed if packet.speed > 0.0 else 0.0
-	_latest_arrival_time[to_id] = now + initial_delay + travel_duration
-	
-	if initial_delay <= 0.0:
-		packet.has_triggered_pulse = true
-		if is_instance_valid(from_vis) and from_vis.has_method("trigger_output_pulse"):
-			from_vis.trigger_output_pulse(from_port)
-			
-	active_packets.append(packet)
+	var flash_key = "%d:%d_%d:%d" % [from_id, from_port, to_id, to_port]
+	active_flashes[flash_key] = {
+		"timer": 0.35,
+		"color": _get_resource_color(resource_name),
+		"from_id": from_id,
+		"from_port": from_port,
+		"to_id": to_id,
+		"to_port": to_port
+	}
+	queue_redraw()
 
 func _process(delta: float) -> void:
-	var i = 0
-	while i < active_packets.size():
-		var pkt = active_packets[i]
-		if pkt.delay > 0.0:
-			pkt.delay -= delta
-			if pkt.delay <= 0.0:
-				pkt.delay = 0.0
-				if not pkt.has_triggered_pulse:
-					pkt.has_triggered_pulse = true
-					var from_vis: BuildingVisual = visuals_map.get(pkt.from_id)
-					if is_instance_valid(from_vis) and from_vis.has_method("trigger_output_pulse"):
-						from_vis.trigger_output_pulse(pkt.from_port)
-			i += 1
-			continue
+	if active_flashes.is_empty():
+		return
+		
+	var keys_to_remove: Array = []
+	for key in active_flashes:
+		var flash = active_flashes[key]
+		flash["timer"] -= delta
+		if flash["timer"] <= 0.0:
+			keys_to_remove.append(key)
 			
-		pkt.progress += pkt.speed * delta
-		if pkt.progress >= pkt.max_travel_dist:
-			active_packets.remove_at(i)
-		else:
-			i += 1
-			
+	for key in keys_to_remove:
+		active_flashes.erase(key)
+		
 	queue_redraw()
 
 func _draw() -> void:
@@ -128,14 +90,12 @@ func _draw() -> void:
 		if not is_instance_valid(from_vis) or not is_instance_valid(to_vis):
 			continue
 			
-		# Skip line drawing if both connected nodes are off-screen
 		if not from_vis.visible and not to_vis.visible:
 			continue
 			
 		var start_pt = from_vis.get_port_global_position(true, from_port)
 		var end_pt = to_vis.get_port_global_position(false, to_port)
 		
-		# Extra bounds check for long connections
 		if not view_rect.has_point(start_pt) and not view_rect.has_point(end_pt):
 			continue
 			
@@ -144,38 +104,27 @@ func _draw() -> void:
 		
 	if pipe_pts.size() > 0:
 		draw_multiline(pipe_pts, line_color, line_width)
-		
-	# 2. Draw flying elongated resource segments (with frustum culling)
-	for pkt in active_packets:
-		if pkt.delay > 0.0:
-			continue
-		var from_vis: BuildingVisual = visuals_map.get(pkt.from_id)
-		var to_vis: BuildingVisual = visuals_map.get(pkt.to_id)
-		
+
+	# 2. Draw instant connection flash highlights for active resource transfers (0.35s pulse timing)
+	for key in active_flashes:
+		var flash = active_flashes[key]
+		var from_vis: BuildingVisual = visuals_map.get(flash["from_id"])
+		var to_vis: BuildingVisual = visuals_map.get(flash["to_id"])
 		if not is_instance_valid(from_vis) or not is_instance_valid(to_vis):
 			continue
 			
-		if not from_vis.visible and not to_vis.visible:
-			continue
-			
-		var start_pt = from_vis.get_port_global_position(true, pkt.from_port)
-		var end_pt = to_vis.get_port_global_position(false, pkt.to_port)
-		var total_len = start_pt.distance_to(end_pt)
-		if total_len < 1.0:
-			continue
-			
-		var dir = (end_pt - start_pt) / total_len
-		var center_dist = pkt.progress
-		var half_len = packet_length * 0.5
+		var start_pt = from_vis.get_port_global_position(true, flash["from_port"])
+		var end_pt = to_vis.get_port_global_position(false, flash["to_port"])
 		
-		var head_dist = clampf(center_dist + half_len, 0.0, total_len)
-		var tail_dist = clampf(center_dist - half_len, 0.0, total_len)
+		var alpha = minf(1.0, flash["timer"] / 0.15)
+		var res_color: Color = flash["color"]
+		var glow_color = Color(res_color.r, res_color.g, res_color.b, alpha * 0.85)
+		var core_color = Color(1.0, 1.0, 1.0, alpha)
 		
-		if tail_dist < head_dist:
-			var p_tail = start_pt + dir * tail_dist
-			var p_head = start_pt + dir * head_dist
-			var color = _get_resource_color(pkt.resource_name)
-			draw_line(p_tail, p_head, color, packet_width)
+		# Outer glow line
+		draw_line(start_pt, end_pt, glow_color, line_width + 3.0)
+		# Inner core line
+		draw_line(start_pt, end_pt, core_color, line_width)
 
 func _get_resource_color(res_name: String) -> Color:
 	match res_name:

@@ -6,8 +6,7 @@
 script = ExtResource("1_51yf0")
 id = "runesteel_amulet"
 name = "Runesteel Amulet"
-description = "+25% Factory Speed & +25% Logistics"
+description = "+25% Factory Speed"
 modifiers = {
-"factory_speed": 0.25,
-"logistics_transfer": 0.25
+"factory_speed": 0.25
 }

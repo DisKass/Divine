@@ -42,21 +42,11 @@ func verify_upgrades_shop() -> void:
 	
 	net.tick(1.0, res_mgr, mod_mgr, ms_mgr, art_mgr) # Internal test tick
 	
-	var backlog_base = miner.outputs.get("iron_ore", 0.0)
-	print("Miner backlog without logistics upgrade (max_transfer=1.0): ", backlog_base)
+	var backlog = miner.outputs.get("iron_ore", 0.0)
+	print("Miner backlog after instant transfer: ", backlog)
 	
-	upg_mgr.buy_upgrade("logistics_transfer")
-	upg_mgr.buy_upgrade("logistics_transfer")
-	
-	miner.outputs["iron_ore"] = 2.0
-	smelter.inputs["iron_ore"] = 0.0
-	net.tick(1.0, res_mgr, mod_mgr, ms_mgr, art_mgr)
-	
-	var backlog_upgraded = miner.outputs.get("iron_ore", 0.0)
-	print("Miner backlog with Logistics Lvl 2 upgrade (max_transfer=2.0): ", backlog_upgraded)
-	
-	if buy1 and buy2 and backlog_base == 1.0 and backlog_upgraded == 0.0:
-		print("[PASS] Global Upgrades purchasing and bottleneck verified.")
+	if buy1 and buy2 and backlog == 0.0:
+		print("[PASS] Global Upgrades purchasing and instant link transfers verified.")
 	else:
 		print("[FAIL] Global Upgrades verification failed.")
 

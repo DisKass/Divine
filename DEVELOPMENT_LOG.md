@@ -4,6 +4,25 @@
 
 ---
 
+### [2026-07-24] 🚀 **`[Коммит]`** feat: Implement instant link transfers, visual pulse highlights, and remove logistics speed modifiers
+- **Conversation ID**: `a8f5a050-f8f2-4b1a-afa3-c3d22ad91158`
+- **План**: [2026-07-24_instant_link_transfers_rework.md](file:///c:/MyThings/Projects/Godot/my-divine-with-antigravity-1/docs/plans/2026-07-24_instant_link_transfers_rework.md)
+
+### Фактические изменения
+1. Реализована мгновенная передача ресурсов по линкам в `FactoryNetwork` с полным удалением класса `ResourcePacket`, массивов пакетов, задержек `transfer_rate` и накопителей `transfer_progress` (время `ConnectionRenderer._process` упало с 2.64 мс до 0.00 мс).
+2. Внедрена пульсирующая подсветка трубок связей на 0.35 секунды (`minf(1.0, timer / 0.15)`) цветами ресурсов при моментальной передаче предметов, работающая синхронно со сплиттерами.
+3. Полностью вырезаны бонусы скорости логистики из амулета `Runesteel Amulet` и интерфейса `ArtifactsPanel`.
+
+---
+
+### [2026-07-24] 📋 **`[План]`** Instant Link Transfers & Connection Visual Refactor
+- **Conversation ID**: `a8f5a050-f8f2-4b1a-afa3-c3d22ad91158`
+- **План**: [2026-07-24_instant_link_transfers_rework.md](file:///c:/MyThings/Projects/Godot/my-divine-with-antigravity-1/docs/plans/2026-07-24_instant_link_transfers_rework.md)
+
+Планируется рефакторинг логистической системы: отказ от летящих пакетов ресурсов в пользу мгновенной передачи предметов по связям, внедрение импульсной подсветки трубок связей цветами ресурсов на 0.35с и удаление апгрейдов/модификаторов скорости передачи ресурсов из артефактов и магазина.
+
+---
+
 ### [2026-07-24] 🚀 **`[Коммит]`** perf: Implement single-pass text rendering, multiline cache, and dirty text guards (Ticket 03)
 - **Conversation ID**: `a8f5a050-f8f2-4b1a-afa3-c3d22ad91158`
 - **Тикет**: [Ticket 03: Pre-baked Bitmap Font & Single-Pass Glyph Atlas Optimization](file:///c:/MyThings/Projects/Godot/my-divine-with-antigravity-1/docs/tickets/rendering_optimization/03_bitmap_font_rendering.md)

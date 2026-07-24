@@ -2,14 +2,12 @@ extends Node2D
 class_name BuildingRenderer
 
 ## High-performance batched renderer for factory buildings using MultiMesh2D instancing and pre-baked procedural textures.
-## Layer ordering:
-## 1. Ports of Standard Buildings (instanced via MultiMeshInstance2D behind panels, z_index = -2)
-## 2. Background Panels (ALL buildings, instanced via MultiMeshInstance2D on GPU in 1 Draw Call, z_index = -1)
-## 3. Borders (ALL buildings, grouped by color using single draw_multiline calls for 100% GPU batching)
-## 4. Progress Bars (Standard buildings)
-## 5. Splitter Flow Lines (OVER splitters)
-## 6. Splitter Ports (instanced via MultiMeshInstance2D OVER splitter lines, z_index = 2)
-## 7. Title & Resource Text (Contiguous passes grouped by uniform alignment and color for 100% GPU batching)
+## Layer ordering (ALL z_index > 0):
+## 1. Connection Lines (z_index = 1, drawn by ConnectionRenderer)
+## 2. Ports of Standard Buildings (instanced via MultiMeshInstance2D, z_index = 2)
+## 3. Background Panels (ALL buildings, instanced via MultiMeshInstance2D, z_index = 3)
+## 4. Building Outlines, Progress Bars, Splitter Lines, Text (BuildingRenderer Node2D, z_index = 4)
+## 5. Splitter Ports (instanced via MultiMeshInstance2D OVER splitter lines, z_index = 6)
 
 var visuals_map: Dictionary = {}
 var camera: GameCamera
@@ -91,7 +89,8 @@ func _init_panel_multimesh() -> void:
 		_panel_multimesh_instance = MultiMeshInstance2D.new()
 		_panel_multimesh_instance.name = "PanelMultiMeshInstance"
 		_panel_multimesh_instance.texture = _panel_texture
-		_panel_multimesh_instance.z_index = -1
+		_panel_multimesh_instance.z_as_relative = false
+		_panel_multimesh_instance.z_index = 3
 		add_child(_panel_multimesh_instance)
 		
 		_quad_mesh = QuadMesh.new()
@@ -110,7 +109,8 @@ func _init_ports_multimeshes() -> void:
 		_in_ports_multimesh_instance = MultiMeshInstance2D.new()
 		_in_ports_multimesh_instance.name = "InPortsMultiMeshInstance"
 		_in_ports_multimesh_instance.texture = _blue_port_texture
-		_in_ports_multimesh_instance.z_index = -2
+		_in_ports_multimesh_instance.z_as_relative = false
+		_in_ports_multimesh_instance.z_index = 2
 		add_child(_in_ports_multimesh_instance)
 		
 		_in_ports_multimesh = MultiMesh.new()
@@ -123,7 +123,8 @@ func _init_ports_multimeshes() -> void:
 		_out_ports_multimesh_instance = MultiMeshInstance2D.new()
 		_out_ports_multimesh_instance.name = "OutPortsMultiMeshInstance"
 		_out_ports_multimesh_instance.texture = _yellow_port_texture
-		_out_ports_multimesh_instance.z_index = -2
+		_out_ports_multimesh_instance.z_as_relative = false
+		_out_ports_multimesh_instance.z_index = 2
 		add_child(_out_ports_multimesh_instance)
 		
 		_out_ports_multimesh = MultiMesh.new()
@@ -136,7 +137,8 @@ func _init_ports_multimeshes() -> void:
 		_splitter_in_ports_multimesh_instance = MultiMeshInstance2D.new()
 		_splitter_in_ports_multimesh_instance.name = "SplitterInPortsMultiMeshInstance"
 		_splitter_in_ports_multimesh_instance.texture = _blue_port_texture
-		_splitter_in_ports_multimesh_instance.z_index = 2
+		_splitter_in_ports_multimesh_instance.z_as_relative = false
+		_splitter_in_ports_multimesh_instance.z_index = 6
 		add_child(_splitter_in_ports_multimesh_instance)
 		
 		_splitter_in_ports_multimesh = MultiMesh.new()
@@ -149,7 +151,8 @@ func _init_ports_multimeshes() -> void:
 		_splitter_out_ports_multimesh_instance = MultiMeshInstance2D.new()
 		_splitter_out_ports_multimesh_instance.name = "SplitterOutPortsMultiMeshInstance"
 		_splitter_out_ports_multimesh_instance.texture = _yellow_port_texture
-		_splitter_out_ports_multimesh_instance.z_index = 2
+		_splitter_out_ports_multimesh_instance.z_as_relative = false
+		_splitter_out_ports_multimesh_instance.z_index = 6
 		add_child(_splitter_out_ports_multimesh_instance)
 		
 		_splitter_out_ports_multimesh = MultiMesh.new()
@@ -159,6 +162,8 @@ func _init_ports_multimeshes() -> void:
 		_splitter_out_ports_multimesh_instance.multimesh = _splitter_out_ports_multimesh
 
 func setup(p_visuals_map: Dictionary, p_camera: GameCamera = null, p_cell_size: int = 32, p_hud: Node = null) -> void:
+	z_as_relative = false
+	z_index = 4
 	visuals_map = p_visuals_map
 	camera = p_camera
 	cell_size = p_cell_size
