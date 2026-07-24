@@ -4,6 +4,16 @@
 
 ---
 
+### [2026-07-24] 🚀 **`[Коммит]`** fix: Real-time connection line redrawing during building drag-and-drop movement
+- **Conversation ID**: `c30c9204-294e-46ea-afc2-89bd5a019e10`
+
+### Фактические изменения
+1. Внедрен вызов перерисовки `connection_renderer.queue_redraw()` и `building_renderer.mark_culling_dirty()` при перемещении одиночных зданий и групп в `InputController`.
+2. Добавлено отслеживание сдвига и масштаба камеры в `ConnectionRenderer._process()` для динамической перерисовки связей при панорамировании.
+3. Проброшены ссылки на `building_renderer` и `connection_renderer` в вызовы `input_controller.setup()` в `MainGame`.
+
+---
+
 ### [2026-07-24] 🚀 **`[Коммит]`** fix: Align building resource text positions with ports, allow full panel width with ellipsis truncation, and remove Credits text on Seller
 - **Conversation ID**: `c30c9204-294e-46ea-afc2-89bd5a019e10`
 

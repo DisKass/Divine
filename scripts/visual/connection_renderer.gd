@@ -54,21 +54,36 @@ func _on_resource_transferred(from_id: int, from_port: int, to_id: int, to_port:
 	}
 	queue_redraw()
 
+var _last_camera_pos: Vector2 = Vector2.INF
+var _last_camera_zoom: float = -1.0
+
 func _process(delta: float) -> void:
-	if active_flashes.is_empty():
+	if network == null or visuals_map.is_empty():
 		return
 		
-	var keys_to_remove: Array = []
-	for key in active_flashes:
-		var flash = active_flashes[key]
-		flash["timer"] -= delta
-		if flash["timer"] <= 0.0:
-			keys_to_remove.append(key)
+	var needs_redraw = false
+	
+	if is_instance_valid(camera):
+		if camera.position != _last_camera_pos or camera.zoom.x != _last_camera_zoom:
+			_last_camera_pos = camera.position
+			_last_camera_zoom = camera.zoom.x
+			needs_redraw = true
 			
-	for key in keys_to_remove:
-		active_flashes.erase(key)
+	if not active_flashes.is_empty():
+		var keys_to_remove: Array = []
+		for key in active_flashes:
+			var flash = active_flashes[key]
+			flash["timer"] -= delta
+			if flash["timer"] <= 0.0:
+				keys_to_remove.append(key)
+				
+		for key in keys_to_remove:
+			active_flashes.erase(key)
+			
+		needs_redraw = true
 		
-	queue_redraw()
+	if needs_redraw:
+		queue_redraw()
 
 func _draw() -> void:
 	if network == null or visuals_map.is_empty():

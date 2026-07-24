@@ -20,6 +20,8 @@ var camera: GameCamera
 var network: FactoryNetwork
 var visuals_map: Dictionary = {}
 var build_preview: PanelContainer
+var building_renderer: BuildingRenderer
+var connection_renderer: ConnectionRenderer
 
 # State mirrored from MainGame
 var current_mode: int = 0 # 0 = INSPECT, 1 = BUILD, 2 = LINK, 3 = DEMOLISH, 4 = COPY_BUILD
@@ -54,11 +56,13 @@ var _last_stream_build_grid: Vector2i = Vector2i(-99999, -99999)
 # Copy preview state (mirrored from MainGame)
 var copy_preview_info: Dictionary = {} # { "buildings": Array, "origin_grid": Vector2i, "is_valid": bool }
 
-func setup(p_camera: GameCamera, p_network: FactoryNetwork, p_visuals_map: Dictionary, p_preview: PanelContainer) -> void:
+func setup(p_camera: GameCamera, p_network: FactoryNetwork, p_visuals_map: Dictionary, p_preview: PanelContainer, p_building_renderer: BuildingRenderer = null, p_connection_renderer: ConnectionRenderer = null) -> void:
 	camera = p_camera
 	network = p_network
 	visuals_map = p_visuals_map
 	build_preview = p_preview
+	building_renderer = p_building_renderer
+	connection_renderer = p_connection_renderer
 	
 	_is_dragging_building = false
 	_dragged_building_id = 0
@@ -71,6 +75,12 @@ func setup(p_camera: GameCamera, p_network: FactoryNetwork, p_visuals_map: Dicti
 	link_source_id = 0
 	link_source_port = 0
 	selected_building_ids.clear()
+
+func _request_renderers_redraw() -> void:
+	if is_instance_valid(building_renderer):
+		building_renderer.mark_culling_dirty()
+	if is_instance_valid(connection_renderer):
+		connection_renderer.queue_redraw()
 
 func set_selected_buildings(ids: Array[int]) -> void:
 	selected_building_ids.clear()
@@ -292,6 +302,7 @@ func _unhandled_input(event: InputEvent) -> void:
 						
 					_is_dragging_group = false
 					_drag_group_starts.clear()
+					_request_renderers_redraw()
 					
 				elif _is_dragging_building:
 					var visual = visuals_map.get(_dragged_building_id)
@@ -319,6 +330,7 @@ func _unhandled_input(event: InputEvent) -> void:
 							
 					_is_dragging_building = false
 					_dragged_building_id = 0
+					_request_renderers_redraw()
 					
 		elif event.button_index == MOUSE_BUTTON_RIGHT:
 			if event.pressed:
@@ -371,6 +383,7 @@ func _unhandled_input(event: InputEvent) -> void:
 					var size_px = Vector2(b_data.size_in_cells * cell_size)
 					visual.position = Vector2(target_top_left) * cell_size + size_px / 2.0
 					visual.is_invalid_drag = not is_valid
+			_request_renderers_redraw()
 
 		elif _is_dragging_building:
 			var target_top_left = _get_dragged_target_top_left()
@@ -381,6 +394,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				visual.position = Vector2(target_top_left) * cell_size + size_px / 2.0
 				var is_free = network.is_area_free(target_top_left, b_data.size_in_cells, _dragged_building_id)
 				visual.is_invalid_drag = not is_free
+			_request_renderers_redraw()
 
 func _update_box_selection_realtime() -> void:
 	var start_pos = _box_select_start

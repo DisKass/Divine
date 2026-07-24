@@ -189,7 +189,7 @@ func _initialize_game() -> void:
 	building_renderer.setup(visuals_map, camera, cell_size, hud)
 	connection_renderer.setup(network, visuals_map, camera)
 	if is_instance_valid(input_controller):
-		input_controller.setup(camera, network, visuals_map, build_preview)
+		input_controller.setup(camera, network, visuals_map, build_preview, building_renderer, connection_renderer)
 
 func _process(delta: float) -> void:
 	# Run simulation ticker ticks
@@ -707,7 +707,7 @@ func _rebuild_visuals() -> void:
 		
 	connection_renderer.setup(network, visuals_map)
 	if is_instance_valid(input_controller):
-		input_controller.setup(camera, network, visuals_map, build_preview)
+		input_controller.setup(camera, network, visuals_map, build_preview, building_renderer, connection_renderer)
 
 # --- Offline Catch-up Dialog ---
 
@@ -773,7 +773,7 @@ func _on_reset_pressed() -> void:
 	
 	connection_renderer.setup(network, visuals_map)
 	if is_instance_valid(input_controller):
-		input_controller.setup(camera, network, visuals_map, build_preview)
+		input_controller.setup(camera, network, visuals_map, build_preview, building_renderer, connection_renderer)
 	if gd_panel != null:
 		gd_panel.setup(milestones_manager, upgrades_manager, self, building_manager, template_manager)
 		
