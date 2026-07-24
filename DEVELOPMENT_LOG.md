@@ -4,6 +4,31 @@
 
 ---
 
+### [2026-07-24] 🚀 **`[Коммит]`** perf: Implement GDScript caching, zero-lookup ports, and dirty-driven redraw (Ticket 01)
+- **Conversation ID**: `a8f5a050-f8f2-4b1a-afa3-c3d22ad91158`
+- **Тикет**: [Ticket 01: GDScript Caching & Dirty Redraw Optimization](file:///c:/MyThings/Projects/Godot/my-divine-with-antigravity-1/docs/tickets/rendering_optimization/01_gdscript_caching_and_dirty_redraw.md)
+
+### Фактические изменения
+1. Реализован быстрый O(1) поиск векторов портов через `_cached_in_ports_local` и `_cached_out_ports_local` в `BuildingVisual`, убравший 1,400+ динамических вычислений и вызовов `get_output_ports_count` за кадр (время вызовов упало с 19.28 мс до 1.63 мс, `ConnectionRenderer._draw` ускорился с 27 мс до 4.25 мс).
+2. Внедрено кэширование текстовых строк ресурсов `update_text_cache()` с флагом `text_dirty` в `BuildingVisual`, исключившее операции со строками в `_draw()`.
+3. Переведена перерисовка `queue_redraw()` в `BuildingRenderer` на событийную модель по событиям камеры, тикам и активным миганиям портов с оптимизацией флага `is_flashing`.
+4. Централизован куллинг зданий в `BuildingRenderer._draw()` с прямым обновлением статистики HUD, убравший 0-ms накладные расходы и дублирующие циклы перебора 2000 зданий из `MainGame._process()` (собственное время упало до 0.00 мс).
+
+---
+
+### [2026-07-24] 📋 **`[План]`** Карта оптимизации рендеринга и GDScript кэширования (Wayfinder)
+- **Conversation ID**: `a8f5a050-f8f2-4b1a-afa3-c3d22ad91158`
+- **Файл карты**: [2026-07-24_wayfinder_rendering_optimization_map.md](file:///c:/MyThings/Projects/Godot/my-divine-with-antigravity-1/docs/plans/2026-07-24_wayfinder_rendering_optimization_map.md)
+- **Тикеты этапа**:
+  - [Ticket 01: GDScript Caching & Dirty Redraw Optimization](file:///c:/MyThings/Projects/Godot/my-divine-with-antigravity-1/docs/tickets/rendering_optimization/01_gdscript_caching_and_dirty_redraw.md)
+  - [Ticket 02: RenderingServer 2D Canvas API Migration](file:///c:/MyThings/Projects/Godot/my-divine-with-antigravity-1/docs/tickets/rendering_optimization/02_renderingserver_2d_api.md)
+  - [Ticket 03: Pre-baked Bitmap Font / Glyph Atlas](file:///c:/MyThings/Projects/Godot/my-divine-with-antigravity-1/docs/tickets/rendering_optimization/03_bitmap_font_rendering.md)
+  - [Ticket 04: MultiMeshInstance2D GPU Instancing for Panels & Ports](file:///c:/MyThings/Projects/Godot/my-divine-with-antigravity-1/docs/tickets/rendering_optimization/04_multimesh_gpu_instancing.md)
+
+Утвержден поэтапный план оптимизации производительности рендеринга до 60+ FPS при 2000+ зданиях. План разбит на 4 последовательных коммита: от устранения задержек в GDScript (кэширование векторов портов, предформатирование строк ресурсов и событийный `queue_redraw`) до внедрения `RenderingServer` 2D Canvas API, запеченных Bitmap-шрифтов и аппаратного инстансинга `MultiMeshInstance2D`.
+
+---
+
 ### [2026-07-24] 🚀 **`[Коммит]`** perf: Implement batched building rendering system reducing GPU draw calls from 4500 to 90
 - **Conversation ID**: `a8f5a050-f8f2-4b1a-afa3-c3d22ad91158`
 

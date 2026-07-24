@@ -2,27 +2,34 @@ extends Node2D
 class_name BuildingRenderer
 
 ## High-performance batched renderer for factory buildings.
-## Preserves discrete visual Z-layering:
+## Layer ordering:
 ## 1. Ports of Standard Buildings (drawn BEFORE building backgrounds/borders so inner half is covered)
 ## 2. Background Panels (ALL buildings)
 ## 3. Borders (ALL buildings, grouped by color using single draw_multiline calls for 100% GPU batching)
 ## 4. Progress Bars (Standard buildings)
 ## 5. Splitter Flow Lines (OVER splitters)
 ## 6. Splitter Ports (OVER splitter lines)
-## 7. Title & Resource Text (Contiguous passes)
+## 7. Title & Resource Text (Contiguous passes using cached text strings)
 
 var visuals_map: Dictionary = {}
 var camera: GameCamera
+var hud: Node
 var cell_size: int = 32
 
 var _fallback_font: Font
 var _circle_texture: Texture2D
 
-func setup(p_visuals_map: Dictionary, p_camera: GameCamera = null, p_cell_size: int = 32) -> void:
+var _last_camera_pos: Vector2 = Vector2.INF
+var _last_camera_zoom: float = -1.0
+
+func setup(p_visuals_map: Dictionary, p_camera: GameCamera = null, p_cell_size: int = 32, p_hud: Node = null) -> void:
 	visuals_map = p_visuals_map
 	camera = p_camera
 	cell_size = p_cell_size
+	hud = p_hud
 	_fallback_font = ThemeDB.fallback_font
+	_last_camera_pos = Vector2.INF
+	_last_camera_zoom = -1.0
 
 func _get_circle_texture() -> Texture2D:
 	if _circle_texture == null:
@@ -41,12 +48,23 @@ func _process(delta: float) -> void:
 	if visuals_map.is_empty():
 		return
 		
-	# Process timers (like port flash timers) on visuals
-	for vis in visuals_map.values():
-		if is_instance_valid(vis) and vis.has_method("_process_port_flashes"):
-			vis._process_port_flashes(delta)
+	var needs_redraw = false
+	
+	# Check camera changes for dirty redraw
+	if is_instance_valid(camera):
+		if camera.position != _last_camera_pos or camera.zoom.x != _last_camera_zoom:
+			_last_camera_pos = camera.position
+			_last_camera_zoom = camera.zoom.x
+			needs_redraw = true
 			
-	queue_redraw()
+	# Process timers only on flashing visuals
+	for vis in visuals_map.values():
+		if is_instance_valid(vis) and vis.is_flashing:
+			if vis._process_port_flashes(delta):
+				needs_redraw = true
+				
+	if needs_redraw:
+		queue_redraw()
 
 func _draw() -> void:
 	if visuals_map.is_empty():
@@ -78,6 +96,9 @@ func _draw() -> void:
 		if is_in_view:
 			visible_visuals.append(vis)
 			
+	if is_instance_valid(hud) and hud.has_method("update_culling_stats"):
+		hud.update_culling_stats(visible_visuals.size(), visuals_map.size())
+		
 	if visible_visuals.is_empty():
 		return
 
@@ -220,11 +241,10 @@ func _draw() -> void:
 	# LAYER 5: Internal Lines on Splitters (drawn OVER building panels)
 	# =========================================================================
 	for vis in splitter_visuals:
-		var data = vis.data
-		var in_pt = vis.get_port_global_position(false, 0)
-		var out_count = BuildingData.get_output_ports_count(data.type)
+		var in_pt = vis.global_position + vis._cached_in_ports_local[0] if vis._cached_in_ports_local.size() > 0 else vis.global_position
+		var out_count = vis._cached_out_ports_local.size()
 		for i in range(out_count):
-			var out_pt = vis.get_port_global_position(true, i)
+			var out_pt = vis.global_position + vis._cached_out_ports_local[i]
 			var is_flashing = (i < vis.port_flash_timers.size() and vis.port_flash_timers[i] > 0.0)
 			if is_flashing:
 				var alpha = minf(1.0, vis.port_flash_timers[i] / 0.15)
@@ -255,14 +275,14 @@ func _draw() -> void:
 			draw_texture_rect(circle_tex, Rect2(pos - inner_offset, inner_size), false, in_color)
 
 	# =========================================================================
-	# LAYER 7: Text (Titles & Resource Lists)
+	# LAYER 7: Text (Titles & Resource Lists using pre-cached text strings)
 	# =========================================================================
 	if not is_low_lod and font != null:
 		# 7A: Title Outlines
 		for vis in std_visuals:
 			var size_px = Vector2(vis.data.size_in_cells * vis.cell_size)
 			var top_left = vis.global_position - size_px / 2.0
-			var title_str = vis.data.type.capitalize()
+			var title_str = vis._cached_title_str
 			var title_pos = Vector2(top_left.x, top_left.y + 14.0)
 			draw_string_outline(font, title_pos, title_str, HORIZONTAL_ALIGNMENT_CENTER, size_px.x, 11, 2, Color.BLACK)
 			
@@ -270,7 +290,7 @@ func _draw() -> void:
 		for vis in std_visuals:
 			var size_px = Vector2(vis.data.size_in_cells * vis.cell_size)
 			var top_left = vis.global_position - size_px / 2.0
-			var title_str = vis.data.type.capitalize()
+			var title_str = vis._cached_title_str
 			var title_pos = Vector2(top_left.x, top_left.y + 14.0)
 			draw_string(font, title_pos, title_str, HORIZONTAL_ALIGNMENT_CENTER, size_px.x, 11, vis.accent_color)
 			
@@ -287,10 +307,10 @@ func _draw() -> void:
 			_draw_resource_text_pass(vis, font, top_left, size_px, false)
 
 func _draw_resource_text_pass(vis: BuildingVisual, font: Font, top_left: Vector2, size_px: Vector2, is_outline: bool) -> void:
-	var data = vis.data
-	var recipe_ctx = {"inputs": data.inputs, "outputs": data.outputs}
-	var in_count = BuildingData.get_input_ports_count(data.type, recipe_ctx)
-	var out_count = BuildingData.get_output_ports_count(data.type, recipe_ctx)
+	var in_lines = vis._cached_in_text_lines
+	var out_lines = vis._cached_out_text_lines
+	var in_count = in_lines.size()
+	var out_count = out_lines.size()
 	
 	var start_y = top_left.y + 26.0
 	var avail_height = size_px.y - 28.0
@@ -299,17 +319,9 @@ func _draw_resource_text_pass(vis: BuildingVisual, font: Font, top_left: Vector2
 		
 	# Draw inputs (left side)
 	if in_count > 0:
-		var in_keys = []
-		for k in data.inputs.keys():
-			if not k.begins_with("_"):
-				in_keys.append(k)
-				
 		var in_step = avail_height / float(max(1, in_count))
-		for i in range(in_keys.size()):
-			var res_name = in_keys[i]
-			var val = int(round(data.inputs.get(res_name, 0.0)))
-			var short_name = res_name.replace("iron_", "").replace("_", " ").capitalize()
-			var txt = "%s: %d" % [short_name, val]
+		for i in range(in_count):
+			var txt = in_lines[i]
 			var line_pos = Vector2(top_left.x + 4.0, start_y + (i + 0.7) * in_step)
 			if is_outline:
 				draw_string_outline(font, line_pos, txt, HORIZONTAL_ALIGNMENT_LEFT, size_px.x * 0.48, 9, 2, Color.BLACK)
@@ -318,17 +330,9 @@ func _draw_resource_text_pass(vis: BuildingVisual, font: Font, top_left: Vector2
 			
 	# Draw outputs (right side)
 	if out_count > 0:
-		var out_keys = []
-		for k in data.outputs.keys():
-			if not k.begins_with("_"):
-				out_keys.append(k)
-				
 		var out_step = avail_height / float(max(1, out_count))
-		for i in range(out_keys.size()):
-			var res_name = out_keys[i]
-			var val = int(round(data.outputs.get(res_name, 0.0)))
-			var short_name = res_name.replace("iron_", "").replace("_", " ").capitalize()
-			var txt = "%s: %d" % [short_name, val]
+		for i in range(out_count):
+			var txt = out_lines[i]
 			var line_pos = Vector2(top_left.x + size_px.x * 0.5, start_y + (i + 0.7) * out_step)
 			if is_outline:
 				draw_string_outline(font, line_pos, txt, HORIZONTAL_ALIGNMENT_RIGHT, size_px.x * 0.48, 9, 2, Color.BLACK)

@@ -186,7 +186,7 @@ func _initialize_game() -> void:
 	)
 	network.sync_portal_inputs(milestones_manager)
 
-	building_renderer.setup(visuals_map, camera, cell_size)
+	building_renderer.setup(visuals_map, camera, cell_size, hud)
 	connection_renderer.setup(network, visuals_map, camera)
 	if is_instance_valid(input_controller):
 		input_controller.setup(camera, network, visuals_map, build_preview)
@@ -194,22 +194,6 @@ func _initialize_game() -> void:
 func _process(delta: float) -> void:
 	# Run simulation ticker ticks
 	ticker.process_realtime(delta)
-	
-	# Update frustum culling and visible counts for all building visuals
-	var visible_world_rect = camera.get_visible_world_rect(128.0) if is_instance_valid(camera) else Rect2(-99999, -99999, 199998, 199998)
-	var current_zoom = camera.zoom.x if is_instance_valid(camera) else 1.0
-	
-	var visible_count = 0
-	var total_count = visuals_map.size()
-	
-	for b_id in visuals_map:
-		var vis: BuildingVisual = visuals_map[b_id]
-		if is_instance_valid(vis):
-			if vis.update_culling(visible_world_rect, current_zoom):
-				visible_count += 1
-				
-	if is_instance_valid(hud) and hud.has_method("update_culling_stats"):
-		hud.update_culling_stats(visible_count, total_count)
 	
 	# Color red if blocked, green if empty and affordable (BUILD preview)
 	if current_mode == MouseMode.BUILD and is_instance_valid(input_controller):
@@ -418,6 +402,11 @@ func _on_hud_mode_changed(mode: int, build_type: String) -> void:
 	_set_mouse_mode(mode as MouseMode, build_type)
 
 func _on_simulation_tick(_ticks: int) -> void:
+	for vis in visuals_map.values():
+		if is_instance_valid(vis) and vis.visible:
+			vis.update_text_cache()
+	if is_instance_valid(building_renderer):
+		building_renderer.queue_redraw()
 	_update_ui()
 	if selected_building_id != 0:
 		_update_inspector()

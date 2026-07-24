@@ -2,7 +2,7 @@ extends Node2D
 class_name BuildingVisual
 
 ## Visual representation proxy of a building on the grid, syncing state with BuildingData.
-## Geometry, port calculations, and state flags are managed here, while rendering is batched by BuildingRenderer.
+## Geometry, port calculations, cached text strings, and state flags are managed here, while rendering is batched by BuildingRenderer.
 
 var data: BuildingData
 var cell_size: int = 64
@@ -17,11 +17,18 @@ var port_flash_timers: Array[float] = [0.0, 0.0, 0.0]
 
 var _cached_in_ports_local: Array[Vector2] = []
 var _cached_out_ports_local: Array[Vector2] = []
+var _cached_in_text_lines: Array[String] = []
+var _cached_out_text_lines: Array[String] = []
+var _cached_title_str: String = ""
+
+var is_flashing: bool = false
+var text_dirty: bool = true
 
 func trigger_output_pulse(port_idx: int) -> void:
 	while port_flash_timers.size() <= port_idx:
 		port_flash_timers.append(0.0)
 	port_flash_timers[port_idx] = 0.35
+	is_flashing = true
 
 func setup(p_data: BuildingData, p_cell_size: int) -> void:
 	data = p_data
@@ -54,6 +61,8 @@ func setup(p_data: BuildingData, p_cell_size: int) -> void:
 	var size_px = Vector2(data.size_in_cells * cell_size)
 	position = Vector2(data.grid_position) * cell_size + size_px / 2.0
 	_update_ports_cache()
+	text_dirty = true
+	update_text_cache()
 
 func _update_ports_cache() -> void:
 	_cached_in_ports_local.clear()
@@ -64,48 +73,26 @@ func _update_ports_cache() -> void:
 	var recipe_ctx = {"inputs": data.inputs, "outputs": data.outputs}
 	var out_count = BuildingData.get_output_ports_count(data.type, recipe_ctx)
 	for i in range(out_count):
-		_cached_out_ports_local.append(get_port_global_position(true, i) - global_position)
+		_cached_out_ports_local.append(_calc_port_global_position(true, i) - global_position)
 		
 	var in_count = BuildingData.get_input_ports_count(data.type, recipe_ctx)
 	for i in range(in_count):
-		_cached_in_ports_local.append(get_port_global_position(false, i) - global_position)
-
-func request_overlay_redraw() -> void:
-	pass
-
-func _process_port_flashes(delta: float) -> void:
-	for i in range(port_flash_timers.size()):
-		if port_flash_timers[i] > 0.0:
-			port_flash_timers[i] = maxf(0.0, port_flash_timers[i] - delta)
-
-func update_culling(visible_world_rect: Rect2, _zoom_level: float = 1.0) -> bool:
-	if data == null:
-		return false
-		
-	var size_px = Vector2(data.size_in_cells * cell_size)
-	var half_size = size_px * 0.5
-	var my_min = global_position - half_size
-	var my_max = global_position + half_size
-	
-	var is_in_view = not (my_max.x < visible_world_rect.position.x or my_min.x > visible_world_rect.end.x or \
-						  my_max.y < visible_world_rect.position.y or my_min.y > visible_world_rect.end.y)
-						  
-	visible = is_in_view
-	return is_in_view
-
-func get_input_port_for_resource(res_name: String) -> int:
-	if data == null:
-		return 0
-	var in_keys = []
-	for k in data.inputs.keys():
-		if not k.begins_with("_"):
-			in_keys.append(k)
-	for i in range(in_keys.size()):
-		if in_keys[i] == res_name:
-			return i
-	return 0
+		_cached_in_ports_local.append(_calc_port_global_position(false, i) - global_position)
 
 func get_port_global_position(is_output: bool, port_idx: int) -> Vector2:
+	if data == null:
+		return global_position
+		
+	if is_output:
+		if port_idx >= 0 and port_idx < _cached_out_ports_local.size():
+			return global_position + _cached_out_ports_local[port_idx]
+	else:
+		if port_idx >= 0 and port_idx < _cached_in_ports_local.size():
+			return global_position + _cached_in_ports_local[port_idx]
+			
+	return _calc_port_global_position(is_output, port_idx)
+
+func _calc_port_global_position(is_output: bool, port_idx: int) -> Vector2:
 	if data == null:
 		return global_position
 		
@@ -146,6 +133,65 @@ func get_port_global_position(is_output: bool, port_idx: int) -> Vector2:
 	var step = (end_y - start_y) / float(total_entries)
 	var port_y = start_y + (float(entry_idx) + 0.5) * step
 	return Vector2(global_position.x + side_x, port_y)
+
+func update_text_cache() -> void:
+	if data == null:
+		return
+	_cached_title_str = data.type.capitalize()
+	_cached_in_text_lines.clear()
+	_cached_out_text_lines.clear()
+	
+	for k in data.inputs:
+		if not k.begins_with("_"):
+			var val = int(round(data.inputs[k]))
+			var short_name = k.replace("iron_", "").replace("_", " ").capitalize()
+			_cached_in_text_lines.append("%s: %d" % [short_name, val])
+			
+	for k in data.outputs:
+		if not k.begins_with("_"):
+			var val = int(round(data.outputs[k]))
+			var short_name = k.replace("iron_", "").replace("_", " ").capitalize()
+			_cached_out_text_lines.append("%s: %d" % [short_name, val])
+
+func request_overlay_redraw() -> void:
+	pass
+
+func _process_port_flashes(delta: float) -> bool:
+	var active = false
+	for i in range(port_flash_timers.size()):
+		if port_flash_timers[i] > 0.0:
+			port_flash_timers[i] = maxf(0.0, port_flash_timers[i] - delta)
+			active = true
+	return active
+
+func update_culling(visible_world_rect: Rect2, _zoom_level: float = 1.0) -> bool:
+	if data == null:
+		return false
+		
+	var size_px = Vector2(data.size_in_cells * cell_size)
+	var half_size = size_px * 0.5
+	var my_min = global_position - half_size
+	var my_max = global_position + half_size
+	
+	var is_in_view = not (my_max.x < visible_world_rect.position.x or my_min.x > visible_world_rect.end.x or \
+						  my_max.y < visible_world_rect.position.y or my_min.y > visible_world_rect.end.y)
+						  
+	visible = is_in_view
+	return is_in_view
+
+func get_input_port_for_resource(res_name: String) -> int:
+	if data == null:
+		return 0
+	var in_keys = []
+	for k in data.inputs.keys():
+		if not k.begins_with("_"):
+			in_keys.append(k)
+	for i in range(in_keys.size()):
+		if in_keys[i] == res_name:
+			return i
+	return 0
+
+
 
 func get_output_port_at_position(click_global_pos: Vector2) -> int:
 	if data == null:
