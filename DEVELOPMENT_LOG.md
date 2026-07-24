@@ -4,6 +4,15 @@
 
 ---
 
+### [2026-07-24] 🚀 **`[Коммит]`** fix: Selection outlines update on box drag and empty space click
+- **Conversation ID**: `56640f4a-2da4-4ee4-98f8-3c0e80007974`
+
+### Фактические изменения
+1. **InputController**: Заменено сопоставление прямоугольников с `encloses()` на `intersects()` при рамке выделения (`Ctrl+LMB drag`), благодаря чему здания выделяются сразу при касании/попадании в рамку. Порог сдвига мыши для панорамирования увеличен с 4px до 8px для корректного сброса выделения на клик по пустому полю.
+2. **MainGame & BuildingRenderer**: Добавлен метод `mark_borders_dirty()` и его вызов в `_handle_inspect()` для своевременной инвалидации кэша контуров зданий при снятии выделения.
+
+---
+
 ### [2026-07-24] 🚀 **`[Коммит]`** perf: Periodic stutter elimination (String & Transfer Optimizations)
 - **Conversation ID**: `56640f4a-2da4-4ee4-98f8-3c0e80007974`
 

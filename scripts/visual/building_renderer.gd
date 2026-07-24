@@ -52,6 +52,10 @@ func mark_culling_dirty() -> void:
 	_borders_dirty = true
 	queue_redraw()
 
+func mark_borders_dirty() -> void:
+	_borders_dirty = true
+	queue_redraw()
+
 func _generate_baked_port_texture(inner_color: Color) -> Texture2D:
 	var img = Image.create(32, 32, false, Image.FORMAT_RGBA8)
 	var center = Vector2(16.0, 16.0)

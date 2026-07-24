@@ -89,6 +89,8 @@ func set_selected_buildings(ids: Array[int]) -> void:
 		var visual = visuals_map[b_id]
 		if is_instance_valid(visual):
 			visual.is_selected = (b_id in selected_building_ids)
+	if is_instance_valid(building_renderer):
+		building_renderer.mark_borders_dirty()
 
 var _last_hovered_id: int = 0
 
@@ -120,6 +122,8 @@ func _process(_delta: float) -> void:
 			if is_instance_valid(new_vis):
 				new_vis.is_hovered = true
 		_last_hovered_id = hover_building_id
+		if is_instance_valid(building_renderer):
+			building_renderer.mark_borders_dirty()
 				
 	# Request redraw for temporary link line, box selection, or copy preview
 	queue_redraw()
@@ -353,7 +357,7 @@ func _unhandled_input(event: InputEvent) -> void:
 						get_viewport().set_input_as_handled()
 						
 	elif event is InputEventMouseMotion:
-		if event.position.distance_to(_lmb_press_screen_pos) > 4.0:
+		if event.position.distance_to(_lmb_press_screen_pos) > 8.0:
 			_has_dragged = true
 
 		if _is_box_selecting:
@@ -413,7 +417,7 @@ func _update_box_selection_realtime() -> void:
 			var size_px = Vector2(visual.data.size_in_cells * cell_size)
 			var b_top_left = visual.global_position - size_px / 2.0
 			var b_rect = Rect2(b_top_left, size_px)
-			if sel_rect.encloses(b_rect):
+			if sel_rect.intersects(b_rect):
 				enclosed_ids.append(b_id)
 				
 	if _is_additive_box_select:

@@ -254,6 +254,9 @@ func _handle_inspect(building_id: int) -> void:
 		_update_inspector()
 	else:
 		inspector_panel.visible = false
+		
+	if is_instance_valid(building_renderer):
+		building_renderer.mark_borders_dirty()
 
 func _handle_build(grid_pos: Vector2i) -> void:
 	var default_rec = default_recipes.get(selected_build_type, {})
