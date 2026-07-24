@@ -1,17 +1,13 @@
-# Ticket 03: Pre-baked Bitmap Font / Glyph Atlas
+# Ticket 03: Pre-baked Bitmap Font & Single-Pass Glyph Atlas Optimization
 
 - **Label**: `wayfinder:task`
 - **Mode**: AFK
-- **Status**: OPEN
-- **Blocked By**: [Ticket 02: RenderingServer 2D Canvas API Migration](file:///c:/MyThings/Projects/Godot/my-divine-with-antigravity-1/docs/tickets/rendering_optimization/02_renderingserver_2d_api.md)
-- **Blocks**: [Ticket 04: MultiMeshInstance2D GPU Instancing for Panels & Ports](file:///c:/MyThings/Projects/Godot/my-divine-with-antigravity-1/docs/tickets/rendering_optimization/04_multimesh_gpu_instancing.md)
+- **Status**: CLOSED
+- **Blocked By**: [Ticket 02: MultiMeshInstance2D Hardware Instancing & Procedural Textures](file:///c:/MyThings/Projects/Godot/my-divine-with-antigravity-1/docs/tickets/rendering_optimization/02_renderingserver_2d_api.md)
+- **Blocks**: *(None)*
 
-## Question
+## Resolution Summary
 
-How can we replace runtime vector font outline calculations with a pre-baked Bitmap Font (`.font` / pre-rendered glyph atlas) to eliminate text rendering CPU overhead?
-
-## Scope & Implementation Details
-
-1. Generate or configure a fixed pixel-grid Bitmap Font asset (`FontFile` with texture glyph atlas).
-2. Configure fixed outline/shadow glyph passes in the font resource.
-3. Replace runtime `draw_string_outline` calls with single-pass bitmap font rendering.
+1. **Dirty Text Cache Guard**: Added `if not text_dirty: return` in `BuildingVisual.update_text_cache()`, eliminating redundant string parsing, `replace`, and `capitalize` operations on every tick for 2,000 buildings (`BuildingVisual.update_text_cache` dropped from 5.77 ms to 0.00 ms).
+2. **Single-Pass Text Sub-functions**: Replaced heavy C++ `draw_string_outline` vector curve calculations with crisp single-pass drop shadow `draw_string(..., pos + Vector2(1, 1), ..., Color.BLACK)` and main text fill.
+3. **Loop Consolidation**: Consolidated 4 separate building loops in `BuildingRenderer._draw()` down to 1 single unified pass over `std_visuals`.

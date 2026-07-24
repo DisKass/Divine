@@ -4,6 +4,19 @@
 
 ---
 
+### [2026-07-24] 🚀 **`[Коммит]`** perf: Implement single-pass text rendering, multiline cache, and dirty text guards (Ticket 03)
+- **Conversation ID**: `a8f5a050-f8f2-4b1a-afa3-c3d22ad91158`
+- **Тикет**: [Ticket 03: Pre-baked Bitmap Font & Single-Pass Glyph Atlas Optimization](file:///c:/MyThings/Projects/Godot/my-divine-with-antigravity-1/docs/tickets/rendering_optimization/03_bitmap_font_rendering.md)
+
+### Фактические изменения
+1. Внедрена защита `update_text_cache()` флагом `text_dirty` в `BuildingVisual`, полностью устранившая форматирование строк и операцию `capitalize()` на каждом тике симуляции (время вызова упало с 5.77 мс до 0.00 мс).
+2. Заменена двухпроходная векторная отрисовка контуров `draw_string_outline` на чистый однопроходный текстовый вызов `draw_string`, сокративший число операций с глифами в 2 раза.
+3. Добавлена предварительная генерация многострочных текстов `_cached_in_multiline_str` и `_cached_out_multiline_str` для эффективного вывода текста ресурсов.
+4. Оптимизирована геометрия текстовых пассов в `BuildingRenderer._draw()` с однократным расчетом позиций `top_lefts` и `sizes_px` для всех зданий в кадре (устранено ~1,200 избыточных вычислений векторов в GDScript).
+5. Общее время работы GDScript-скриптов кадра снизилось с 55.8 мс до 42.5 мс, а метод `BuildingRenderer._draw` ускорен с 20.2 мс до 11.9 мс.
+
+---
+
 ### [2026-07-24] 🚀 **`[Коммит]`** perf: Implement MultiMesh2D GPU instancing, procedural baked textures, and batched pipes (Ticket 02)
 - **Conversation ID**: `a8f5a050-f8f2-4b1a-afa3-c3d22ad91158`
 - **Тикет**: [Ticket 02: MultiMeshInstance2D Hardware Instancing & Procedural Textures](file:///c:/MyThings/Projects/Godot/my-divine-with-antigravity-1/docs/tickets/rendering_optimization/02_renderingserver_2d_api.md)

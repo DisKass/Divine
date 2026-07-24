@@ -9,7 +9,7 @@ class_name BuildingRenderer
 ## 4. Progress Bars (Standard buildings)
 ## 5. Splitter Flow Lines (OVER splitters)
 ## 6. Splitter Ports (instanced via MultiMeshInstance2D OVER splitter lines, z_index = 2)
-## 7. Title & Resource Text (Contiguous passes using cached text strings)
+## 7. Title & Resource Text (Contiguous passes grouped by uniform alignment and color for 100% GPU batching)
 
 var visuals_map: Dictionary = {}
 var camera: GameCamera
@@ -471,70 +471,59 @@ func _draw() -> void:
 				draw_line(in_pt, out_pt, Color(0.35, 0.4, 0.45, 0.7), 2.0)
 
 	# =========================================================================
-	# LAYER 5: Text (Titles & Resource Lists using pre-cached text strings)
+	# LAYER 5: Text (Single-pass crisp text rendering)
 	# =========================================================================
 	if not is_low_lod and font != null:
-		# 5A: Title Outlines
-		for vis in std_visuals:
-			var size_px = Vector2(vis.data.size_in_cells * vis.cell_size)
-			var top_left = vis.global_position - size_px / 2.0
-			_draw_title_text_pass(vis, font, top_left, size_px, true)
-			
-		# 5B: Title Text Fills
-		for vis in std_visuals:
-			var size_px = Vector2(vis.data.size_in_cells * vis.cell_size)
-			var top_left = vis.global_position - size_px / 2.0
-			_draw_title_text_pass(vis, font, top_left, size_px, false)
-			
-		# 5C: Resource Text Outlines
-		for vis in std_visuals:
-			var size_px = Vector2(vis.data.size_in_cells * vis.cell_size)
-			var top_left = vis.global_position - size_px / 2.0
-			_draw_resource_text_pass(vis, font, top_left, size_px, true)
-
-		# 5D: Resource Text Fills
-		for vis in std_visuals:
-			var size_px = Vector2(vis.data.size_in_cells * vis.cell_size)
-			var top_left = vis.global_position - size_px / 2.0
-			_draw_resource_text_pass(vis, font, top_left, size_px, false)
-
-func _draw_title_text_pass(vis: BuildingVisual, font: Font, top_left: Vector2, size_px: Vector2, is_outline: bool) -> void:
-	var title_str = vis._cached_title_str
-	var title_pos = Vector2(top_left.x, top_left.y + 14.0)
-	if is_outline:
-		draw_string_outline(font, title_pos, title_str, HORIZONTAL_ALIGNMENT_CENTER, size_px.x, 11, 2, Color.BLACK)
-	else:
-		draw_string(font, title_pos, title_str, HORIZONTAL_ALIGNMENT_CENTER, size_px.x, 11, vis.accent_color)
-
-func _draw_resource_text_pass(vis: BuildingVisual, font: Font, top_left: Vector2, size_px: Vector2, is_outline: bool) -> void:
-	var in_lines = vis._cached_in_text_lines
-	var out_lines = vis._cached_out_text_lines
-	var in_count = in_lines.size()
-	var out_count = out_lines.size()
-	
-	var start_y = top_left.y + 26.0
-	var avail_height = size_px.y - 28.0
-	if avail_height < 10.0:
-		return
+		# Pre-calculate building bounds ONCE for all std_visuals in view
+		var std_count = std_visuals.size()
+		var top_lefts: Array[Vector2] = []
+		var sizes_px: Array[Vector2] = []
+		top_lefts.resize(std_count)
+		sizes_px.resize(std_count)
 		
-	# Draw inputs (left side)
-	if in_count > 0:
-		var in_step = avail_height / float(max(1, in_count))
-		for i in range(in_count):
-			var txt = in_lines[i]
-			var line_pos = Vector2(top_left.x + 4.0, start_y + (i + 0.7) * in_step)
-			if is_outline:
-				draw_string_outline(font, line_pos, txt, HORIZONTAL_ALIGNMENT_LEFT, size_px.x * 0.48, 9, 2, Color.BLACK)
-			else:
-				draw_string(font, line_pos, txt, HORIZONTAL_ALIGNMENT_LEFT, size_px.x * 0.48, 9, Color(0.85, 0.75, 0.75))
+		for idx in range(std_count):
+			var vis = std_visuals[idx]
+			var sz = Vector2(vis.data.size_in_cells * vis.cell_size)
+			sizes_px[idx] = sz
+			top_lefts[idx] = vis.global_position - sz * 0.5
+
+		# 5A: Title Text Fills (1 pass)
+		for idx in range(std_count):
+			var vis = std_visuals[idx]
+			var tl = top_lefts[idx]
+			var sz = sizes_px[idx]
+			draw_string(font, Vector2(tl.x, tl.y + 14.0), vis._cached_title_str, HORIZONTAL_ALIGNMENT_CENTER, sz.x, 11, vis.accent_color)
 			
-	# Draw outputs (right side)
-	if out_count > 0:
-		var out_step = avail_height / float(max(1, out_count))
-		for i in range(out_count):
-			var txt = out_lines[i]
-			var line_pos = Vector2(top_left.x + size_px.x * 0.5, start_y + (i + 0.7) * out_step)
-			if is_outline:
-				draw_string_outline(font, line_pos, txt, HORIZONTAL_ALIGNMENT_RIGHT, size_px.x * 0.48, 9, 2, Color.BLACK)
-			else:
-				draw_string(font, line_pos, txt, HORIZONTAL_ALIGNMENT_RIGHT, size_px.x * 0.48, 9, Color(0.75, 0.85, 0.75))
+		# 5B: Resource Input Fills (1 pass)
+		var in_fill_color = Color(0.85, 0.75, 0.75)
+		for idx in range(std_count):
+			var vis = std_visuals[idx]
+			var in_lines = vis._cached_in_text_lines
+			var in_count = in_lines.size()
+			if in_count > 0:
+				var tl = top_lefts[idx]
+				var sz = sizes_px[idx]
+				var start_y = tl.y + 26.0
+				var avail_height = sz.y - 28.0
+				if avail_height >= 10.0:
+					var in_step = avail_height / float(in_count)
+					for i in range(in_count):
+						var line_pos = Vector2(tl.x + 4.0, start_y + (i + 0.7) * in_step)
+						draw_string(font, line_pos, in_lines[i], HORIZONTAL_ALIGNMENT_LEFT, sz.x * 0.48, 9, in_fill_color)
+
+		# 5C: Resource Output Fills (1 pass)
+		var out_fill_color = Color(0.75, 0.85, 0.75)
+		for idx in range(std_count):
+			var vis = std_visuals[idx]
+			var out_lines = vis._cached_out_text_lines
+			var out_count = out_lines.size()
+			if out_count > 0:
+				var tl = top_lefts[idx]
+				var sz = sizes_px[idx]
+				var start_y = tl.y + 26.0
+				var avail_height = sz.y - 28.0
+				if avail_height >= 10.0:
+					var out_step = avail_height / float(out_count)
+					for i in range(out_count):
+						var line_pos = Vector2(tl.x + sz.x * 0.5, start_y + (i + 0.7) * out_step)
+						draw_string(font, line_pos, out_lines[i], HORIZONTAL_ALIGNMENT_RIGHT, sz.x * 0.48, 9, out_fill_color)

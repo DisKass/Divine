@@ -134,9 +134,13 @@ func _calc_port_global_position(is_output: bool, port_idx: int) -> Vector2:
 	var port_y = start_y + (float(entry_idx) + 0.5) * step
 	return Vector2(global_position.x + side_x, port_y)
 
+var _cached_in_multiline_str: String = ""
+var _cached_out_multiline_str: String = ""
+
 func update_text_cache() -> void:
-	if data == null:
+	if data == null or not text_dirty:
 		return
+	text_dirty = false
 	_cached_title_str = data.type.capitalize()
 	_cached_in_text_lines.clear()
 	_cached_out_text_lines.clear()
@@ -152,6 +156,9 @@ func update_text_cache() -> void:
 			var val = int(round(data.outputs[k]))
 			var short_name = k.replace("iron_", "").replace("_", " ").capitalize()
 			_cached_out_text_lines.append("%s: %d" % [short_name, val])
+			
+	_cached_in_multiline_str = "\n".join(_cached_in_text_lines)
+	_cached_out_multiline_str = "\n".join(_cached_out_text_lines)
 
 func request_overlay_redraw() -> void:
 	pass
