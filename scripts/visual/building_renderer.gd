@@ -508,13 +508,21 @@ func _draw() -> void:
 			if in_count > 0:
 				var tl = top_lefts[idx]
 				var sz = sizes_px[idx]
-				var start_y = tl.y + 26.0
-				var avail_height = sz.y - 28.0
-				if avail_height >= 10.0:
-					var in_step = avail_height / float(in_count)
-					for i in range(in_count):
-						var line_pos = Vector2(tl.x + 4.0, start_y + (i + 0.7) * in_step)
-						draw_string(font, line_pos, in_lines[i], HORIZONTAL_ALIGNMENT_LEFT, sz.x * 0.48, 9, in_fill_color)
+				var g_pos = vis.global_position
+				var cached_ports = vis._cached_in_ports_local
+				var port_count = cached_ports.size()
+				var avail_w = sz.x - 8.0
+				for i in range(in_count):
+					var line_y: float
+					if i < port_count:
+						line_y = g_pos.y + cached_ports[i].y + 3.0
+					else:
+						var start_y = tl.y + float(vis.cell_size)
+						var avail_height = sz.y - float(vis.cell_size) - 3.0
+						var step = avail_height / float(max(1, in_count))
+						line_y = start_y + (i + 0.5) * step + 3.0
+					var line_pos = Vector2(tl.x + 4.0, line_y)
+					draw_string(font, line_pos, in_lines[i], HORIZONTAL_ALIGNMENT_LEFT, avail_w, 9, in_fill_color)
 
 		# 5C: Resource Output Fills (1 pass)
 		var out_fill_color = Color(0.75, 0.85, 0.75)
@@ -525,10 +533,18 @@ func _draw() -> void:
 			if out_count > 0:
 				var tl = top_lefts[idx]
 				var sz = sizes_px[idx]
-				var start_y = tl.y + 26.0
-				var avail_height = sz.y - 28.0
-				if avail_height >= 10.0:
-					var out_step = avail_height / float(out_count)
-					for i in range(out_count):
-						var line_pos = Vector2(tl.x + sz.x * 0.5, start_y + (i + 0.7) * out_step)
-						draw_string(font, line_pos, out_lines[i], HORIZONTAL_ALIGNMENT_RIGHT, sz.x * 0.48, 9, out_fill_color)
+				var g_pos = vis.global_position
+				var cached_ports = vis._cached_out_ports_local
+				var port_count = cached_ports.size()
+				var avail_w = sz.x - 8.0
+				for i in range(out_count):
+					var line_y: float
+					if i < port_count:
+						line_y = g_pos.y + cached_ports[i].y + 3.0
+					else:
+						var start_y = tl.y + float(vis.cell_size)
+						var avail_height = sz.y - float(vis.cell_size) - 3.0
+						var step = avail_height / float(max(1, out_count))
+						line_y = start_y + (i + 0.5) * step + 3.0
+					var line_pos = Vector2(tl.x + 4.0, line_y)
+					draw_string(font, line_pos, out_lines[i], HORIZONTAL_ALIGNMENT_RIGHT, avail_w, 9, out_fill_color)

@@ -136,26 +136,52 @@ func _calc_port_global_position(is_output: bool, port_idx: int) -> Vector2:
 
 var _cached_in_multiline_str: String = ""
 var _cached_out_multiline_str: String = ""
+var _last_ui_version: int = -1
+
+static func format_resource_line(short_name: String, val: int, max_width: float, font: Font, font_size: int = 9) -> String:
+	var suffix = ": %d" % val
+	var full_str = "%s%s" % [short_name, suffix]
+	if font == null or max_width <= 0.0:
+		return full_str
+		
+	if font.get_string_size(full_str, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x <= max_width:
+		return full_str
+		
+	var name_len = short_name.length()
+	for l in range(name_len - 1, 0, -1):
+		var candidate = "%s...%s" % [short_name.substr(0, l), suffix]
+		if font.get_string_size(candidate, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x <= max_width:
+			return candidate
+			
+	return "...%s" % suffix
 
 func update_text_cache() -> void:
-	if data == null or not text_dirty:
+	if data == null:
+		return
+	if data.ui_version != _last_ui_version:
+		_last_ui_version = data.ui_version
+		text_dirty = true
+	if not text_dirty:
 		return
 	text_dirty = false
 	_cached_title_str = data.type.capitalize()
 	_cached_in_text_lines.clear()
 	_cached_out_text_lines.clear()
 	
+	var font = ThemeDB.fallback_font
+	var max_width = float(data.size_in_cells.x * cell_size - 8)
+	
 	for k in data.inputs:
 		if not k.begins_with("_"):
 			var val = int(round(data.inputs[k]))
 			var short_name = k.replace("iron_", "").replace("_", " ").capitalize()
-			_cached_in_text_lines.append("%s: %d" % [short_name, val])
+			_cached_in_text_lines.append(format_resource_line(short_name, val, max_width, font, 9))
 			
 	for k in data.outputs:
-		if not k.begins_with("_"):
+		if not k.begins_with("_") and k != "credits":
 			var val = int(round(data.outputs[k]))
 			var short_name = k.replace("iron_", "").replace("_", " ").capitalize()
-			_cached_out_text_lines.append("%s: %d" % [short_name, val])
+			_cached_out_text_lines.append(format_resource_line(short_name, val, max_width, font, 9))
 			
 	_cached_in_multiline_str = "\n".join(_cached_in_text_lines)
 	_cached_out_multiline_str = "\n".join(_cached_out_text_lines)

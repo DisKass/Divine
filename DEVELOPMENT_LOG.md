@@ -4,6 +4,17 @@
 
 ---
 
+### [2026-07-24] 🚀 **`[Коммит]`** fix: Align building resource text positions with ports, allow full panel width with ellipsis truncation, and remove Credits text on Seller
+- **Conversation ID**: `c30c9204-294e-46ea-afc2-89bd5a019e10`
+
+### Фактические изменения
+1. Выровнено позиционирование строк ресурсов в `BuildingRenderer._draw()` по вертикали с точными координатами Y соответствующих портов из `_cached_in_ports_local` и `_cached_out_ports_local`.
+2. Расширена горизонтальная область текста в `BuildingRenderer` до полной ширины плашки здания (`sz.x - 8.0`) для левого и правого выравнивания надписей.
+3. Внедрен метод `format_resource_line()` в `BuildingVisual` с интеллектуальным сокращением названий ресурсов через троеточие (`...`), если строка превышает ширину здания (например, `Mana Crys...: 0`).
+4. Скрыт вывод метки ресурса `Credits` для зданий типа Seller в `BuildingVisual.update_text_cache()`.
+
+---
+
 ### [2026-07-24] 🚀 **`[Коммит]`** feat: Implement instant link transfers, visual pulse highlights, and remove logistics speed modifiers
 - **Conversation ID**: `a8f5a050-f8f2-4b1a-afa3-c3d22ad91158`
 - **План**: [2026-07-24_instant_link_transfers_rework.md](file:///c:/MyThings/Projects/Godot/my-divine-with-antigravity-1/docs/plans/2026-07-24_instant_link_transfers_rework.md)
