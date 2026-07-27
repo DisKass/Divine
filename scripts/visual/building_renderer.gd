@@ -378,10 +378,14 @@ func _draw_static_layer(canvas: CanvasItem) -> void:
 	var font = _fallback_font
 	if font == null: font = ThemeDB.fallback_font
 	
-	var all_visuals = visuals_map.values()
+	var all_visuals = []
+	for vis in visuals_map.values():
+		if is_instance_valid(vis) and not vis.is_selected and not vis.is_dragged:
+			all_visuals.append(vis)
+			
 	var std_visuals: Array[BuildingVisual] = []
 	for vis in all_visuals:
-		if is_instance_valid(vis) and vis.data and not vis.data.is_splitter:
+		if vis.data and not vis.data.is_splitter:
 			std_visuals.append(vis)
 			
 	# Base Borders (NO CULLING)
@@ -416,72 +420,78 @@ func _draw_static_layer(canvas: CanvasItem) -> void:
 			idx += 8
 		canvas.draw_multiline(pts, col, width)
 		
-	# Text (NO CULLING)
+	# Text (NO CULLING for static layer)
 	if font != null:
-		var std_count = std_visuals.size()
-		var top_lefts: Array[Vector2] = []
-		var sizes_px: Array[Vector2] = []
-		top_lefts.resize(std_count)
-		sizes_px.resize(std_count)
+		_draw_building_text(canvas, std_visuals, font)
+
+func _draw_building_text(canvas: CanvasItem, std_visuals: Array[BuildingVisual], font: Font) -> void:
+	var std_count = std_visuals.size()
+	if std_count == 0:
+		return
 		
-		for idx in range(std_count):
-			var vis = std_visuals[idx]
-			var sz = Vector2(vis.data.size_in_cells * vis.cell_size)
-			sizes_px[idx] = sz
-			top_lefts[idx] = vis.global_position - sz * 0.5
+	var top_lefts: Array[Vector2] = []
+	var sizes_px: Array[Vector2] = []
+	top_lefts.resize(std_count)
+	sizes_px.resize(std_count)
+	
+	for idx in range(std_count):
+		var vis = std_visuals[idx]
+		var sz = Vector2(vis.data.size_in_cells * vis.cell_size)
+		sizes_px[idx] = sz
+		top_lefts[idx] = vis.global_position - sz * 0.5
 
-		# Title Text Fills
-		for idx in range(std_count):
-			var vis = std_visuals[idx]
-			canvas.draw_string(font, Vector2(top_lefts[idx].x, top_lefts[idx].y + 14.0), vis._cached_title_str, HORIZONTAL_ALIGNMENT_CENTER, sizes_px[idx].x, 11, vis.accent_color)
-			
-		# Resource Input Fills
-		var in_fill_color = Color(0.85, 0.75, 0.75)
-		for idx in range(std_count):
-			var vis = std_visuals[idx]
-			var in_lines = vis._cached_in_text_lines
-			var in_count = in_lines.size()
-			if in_count > 0:
-				var tl = top_lefts[idx]
-				var sz = sizes_px[idx]
-				var g_pos = vis.global_position
-				var cached_ports = vis._cached_in_ports_local
-				var port_count = cached_ports.size()
-				var avail_w = sz.x - 8.0
-				for i in range(in_count):
-					var line_y: float
-					if i < port_count:
-						line_y = g_pos.y + cached_ports[i].y + 3.0
-					else:
-						var start_y = tl.y + float(vis.cell_size)
-						var avail_height = sz.y - float(vis.cell_size) - 3.0
-						var step = avail_height / float(max(1, in_count))
-						line_y = start_y + (i + 0.5) * step + 3.0
-					canvas.draw_string(font, Vector2(tl.x + 4.0, line_y), in_lines[i], HORIZONTAL_ALIGNMENT_LEFT, avail_w, 9, in_fill_color)
+	# Title Text Fills
+	for idx in range(std_count):
+		var vis = std_visuals[idx]
+		canvas.draw_string(font, Vector2(top_lefts[idx].x, top_lefts[idx].y + 14.0), vis._cached_title_str, HORIZONTAL_ALIGNMENT_CENTER, sizes_px[idx].x, 11, vis.accent_color)
+		
+	# Resource Input Fills
+	var in_fill_color = Color(0.85, 0.75, 0.75)
+	for idx in range(std_count):
+		var vis = std_visuals[idx]
+		var in_lines = vis._cached_in_text_lines
+		var in_count = in_lines.size()
+		if in_count > 0:
+			var tl = top_lefts[idx]
+			var sz = sizes_px[idx]
+			var g_pos = vis.global_position
+			var cached_ports = vis._cached_in_ports_local
+			var port_count = cached_ports.size()
+			var avail_w = sz.x - 8.0
+			for i in range(in_count):
+				var line_y: float
+				if i < port_count:
+					line_y = g_pos.y + cached_ports[i].y + 3.0
+				else:
+					var start_y = tl.y + float(vis.cell_size)
+					var avail_height = sz.y - float(vis.cell_size) - 3.0
+					var step = avail_height / float(max(1, in_count))
+					line_y = start_y + (i + 0.5) * step + 3.0
+				canvas.draw_string(font, Vector2(tl.x + 4.0, line_y), in_lines[i], HORIZONTAL_ALIGNMENT_LEFT, avail_w, 9, in_fill_color)
 
-		# Resource Output Fills
-		var out_fill_color = Color(0.75, 0.85, 0.75)
-		for idx in range(std_count):
-			var vis = std_visuals[idx]
-			var out_lines = vis._cached_out_text_lines
-			var out_count = out_lines.size()
-			if out_count > 0:
-				var tl = top_lefts[idx]
-				var sz = sizes_px[idx]
-				var g_pos = vis.global_position
-				var cached_ports = vis._cached_out_ports_local
-				var port_count = cached_ports.size()
-				var avail_w = sz.x - 8.0
-				for i in range(out_count):
-					var line_y: float
-					if i < port_count:
-						line_y = g_pos.y + cached_ports[i].y + 3.0
-					else:
-						var start_y = tl.y + float(vis.cell_size)
-						var avail_height = sz.y - float(vis.cell_size) - 3.0
-						var step = avail_height / float(max(1, out_count))
-						line_y = start_y + (i + 0.5) * step + 3.0
-					canvas.draw_string(font, Vector2(tl.x + 4.0, line_y), out_lines[i], HORIZONTAL_ALIGNMENT_RIGHT, avail_w, 9, out_fill_color)
+	# Resource Output Fills
+	var out_fill_color = Color(0.75, 0.85, 0.75)
+	for idx in range(std_count):
+		var vis = std_visuals[idx]
+		var out_lines = vis._cached_out_text_lines
+		var out_count = out_lines.size()
+		if out_count > 0:
+			var tl = top_lefts[idx]
+			var sz = sizes_px[idx]
+			var g_pos = vis.global_position
+			var cached_ports = vis._cached_out_ports_local
+			var port_count = cached_ports.size()
+			var avail_w = sz.x - 8.0
+			for i in range(out_count):
+				var line_y: float
+				if i < port_count:
+					line_y = g_pos.y + cached_ports[i].y + 3.0
+				else:
+					var start_y = tl.y + float(vis.cell_size)
+					var avail_height = sz.y - float(vis.cell_size) - 3.0
+					var step = avail_height / float(max(1, out_count))
+					line_y = start_y + (i + 0.5) * step + 3.0
+				canvas.draw_string(font, Vector2(tl.x + 4.0, line_y), out_lines[i], HORIZONTAL_ALIGNMENT_RIGHT, avail_w, 9, out_fill_color)
 
 func _draw_dynamic_layer(canvas: CanvasItem) -> void:
 	if _cached_visible_visuals.is_empty():
@@ -490,10 +500,10 @@ func _draw_dynamic_layer(canvas: CanvasItem) -> void:
 	var current_zoom = camera.zoom.x if is_instance_valid(camera) else 1.0
 	var is_low_lod = (current_zoom < 0.45)
 	
-	# Dynamic Borders (Hovered / Selected / Invalid Drag)
+	# Dynamic Borders (Hovered / Selected / Invalid Drag / Dragged)
 	var temp_groups: Dictionary = {}
 	for vis in _cached_visible_visuals:
-		if vis.is_invalid_drag or vis.is_selected or vis.is_hovered:
+		if vis.is_invalid_drag or vis.is_selected or vis.is_hovered or vis.is_dragged:
 			var size_px = Vector2(vis.data.size_in_cells * vis.cell_size)
 			var top_left = vis.global_position - size_px / 2.0
 			var rect = Rect2(top_left, size_px)
@@ -503,7 +513,7 @@ func _draw_dynamic_layer(canvas: CanvasItem) -> void:
 			if vis.is_invalid_drag:
 				border_color = Color(0.9, 0.25, 0.25)
 				border_width = 3.0
-			elif vis.is_selected:
+			elif vis.is_selected or vis.is_dragged:
 				border_color = Color(1.0, 0.9, 0.3)
 				border_width = 3.0
 			elif vis.is_hovered:
@@ -554,7 +564,16 @@ func _draw_dynamic_layer(canvas: CanvasItem) -> void:
 					if fill_ratio > 0.0:
 						canvas.draw_rect(Rect2(top_left.x + bar_margin_x, bar_y, bar_width * fill_ratio, 5.0), vis.accent_color, true)
 						
-	# Splitter Lines
+	# Selected Building Text (Dynamic)
+	var font = _fallback_font
+	if font == null: font = ThemeDB.fallback_font
+	if font != null:
+		var selected_std_visuals: Array[BuildingVisual] = []
+		for vis in _cached_visible_visuals:
+			if (vis.is_selected or vis.is_dragged) and vis.data and not vis.data.is_splitter:
+				selected_std_visuals.append(vis)
+		if selected_std_visuals.size() > 0:
+			_draw_building_text(canvas, selected_std_visuals, font)
 	for vis in _cached_splitter_visuals:
 		var in_pt = vis.global_position + vis._cached_in_ports_local[0] if vis._cached_in_ports_local.size() > 0 else vis.global_position
 		var out_count = vis._cached_out_ports_local.size()

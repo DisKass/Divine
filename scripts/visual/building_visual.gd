@@ -8,6 +8,7 @@ var data: BuildingData
 var cell_size: int = 64
 var is_selected: bool = false
 var is_hovered: bool = false
+var is_dragged: bool = false
 var is_invalid_drag: bool = false
 
 # Styling Color based on building type

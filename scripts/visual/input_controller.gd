@@ -79,7 +79,6 @@ func setup(p_camera: GameCamera, p_network: FactoryNetwork, p_visuals_map: Dicti
 func _request_renderers_redraw() -> void:
 	if is_instance_valid(building_renderer):
 		building_renderer.mark_culling_dirty()
-		building_renderer.request_static_redraw()
 	if is_instance_valid(connection_renderer) and connection_renderer.has_method("mark_lines_dirty"):
 		connection_renderer.mark_lines_dirty()
 
@@ -92,6 +91,7 @@ func set_selected_buildings(ids: Array[int]) -> void:
 			visual.is_selected = (b_id in selected_building_ids)
 	if is_instance_valid(building_renderer):
 		building_renderer.mark_borders_dirty()
+		building_renderer.request_static_redraw()
 
 var _last_hovered_id: int = 0
 
@@ -225,11 +225,19 @@ func _unhandled_input(event: InputEvent) -> void:
 						for id in selected_building_ids:
 							if network.buildings.has(id):
 								_drag_group_starts[id] = network.buildings[id].grid_position
+								var vis = visuals_map.get(id)
+								if is_instance_valid(vis):
+									vis.is_dragged = true
 					else:
 						# Single building drag
 						_is_dragging_building = true
 						_dragged_building_id = building_id
 						_drag_building_start_grid = grid_pos
+						var vis = visuals_map.get(building_id)
+						if is_instance_valid(vis):
+							vis.is_dragged = true
+					if is_instance_valid(building_renderer):
+						building_renderer.request_static_redraw()
 				else:
 					if current_mode == 1: # MouseMode.BUILD
 						_is_stream_building = true
@@ -274,7 +282,12 @@ func _unhandled_input(event: InputEvent) -> void:
 								selection_changed.emit(selected_building_ids)
 								building_clicked.emit(0)
 							
-				elif _is_dragging_group:
+				if _is_dragging_group:
+					for id in selected_building_ids:
+						var visual = visuals_map.get(id)
+						if is_instance_valid(visual):
+							visual.is_dragged = false
+							
 					if _has_dragged:
 						var delta_grid = _get_group_drag_delta_grid()
 						var is_valid = _check_group_drag_validity(delta_grid)
@@ -308,9 +321,13 @@ func _unhandled_input(event: InputEvent) -> void:
 					_is_dragging_group = false
 					_drag_group_starts.clear()
 					_request_renderers_redraw()
+					if is_instance_valid(building_renderer):
+						building_renderer.request_static_redraw()
 					
 				elif _is_dragging_building:
 					var visual = visuals_map.get(_dragged_building_id)
+					if is_instance_valid(visual):
+						visual.is_dragged = false
 					var b_data = network.buildings.get(_dragged_building_id)
 					if _has_dragged:
 						var target_top_left = _get_dragged_target_top_left()
@@ -336,6 +353,8 @@ func _unhandled_input(event: InputEvent) -> void:
 					_is_dragging_building = false
 					_dragged_building_id = 0
 					_request_renderers_redraw()
+					if is_instance_valid(building_renderer):
+						building_renderer.request_static_redraw()
 					
 		elif event.button_index == MOUSE_BUTTON_RIGHT:
 			if event.pressed:
