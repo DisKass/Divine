@@ -405,11 +405,13 @@ func _on_hud_mode_changed(mode: int, build_type: String) -> void:
 	_set_mouse_mode(mode as MouseMode, build_type)
 
 func _on_simulation_tick(_ticks: int) -> void:
+	var any_text_updated = false
 	for vis in visuals_map.values():
 		if is_instance_valid(vis) and vis.visible:
-			vis.update_text_cache()
-	if is_instance_valid(building_renderer):
-		building_renderer.queue_redraw()
+			if vis.update_text_cache():
+				any_text_updated = true
+	if is_instance_valid(building_renderer) and any_text_updated:
+		building_renderer.request_static_redraw()
 	_update_ui()
 	if selected_building_id != 0:
 		_update_inspector()

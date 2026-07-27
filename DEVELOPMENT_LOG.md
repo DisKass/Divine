@@ -4,6 +4,23 @@
 
 ---
 
+### [2026-07-27] 🚀 **`[Коммит]`** perf: Static/Dynamic rendering split and factory network optimizations
+- **Conversation ID**: `d08bd109-eb6b-4efa-9e47-f3e3c2694f5e`
+
+### Фактические изменения
+1. **BuildingRenderer**: Разделена отрисовка зданий на два CanvasItem-слоя: `StaticUI` (тексты и базовые рамки) и `DynamicUI` (прогресс-бары, мигающие линии, рамки наведения). Статика обновляется только при реальных изменениях.
+2. **BuildingVisual**: Кэш текста `update_text_cache` теперь возвращает `bool` при фактическом обновлении строк, что позволило в `MainGame` запрашивать перерисовку `StaticUI` только при необходимости. Исправлено обновление `StaticUI` при перетаскивании зданий в `InputController`.
+3. **FactoryNetwork**: Убраны тяжелые аллокации (создание новых массивов `.values()`) во внутренних циклах логистики и очищен рекурсивный массив `visited_splitters`.
+
+---
+
+### [2026-07-27] 📋 **`[План]`** Optimization of Factory Network and Rendering
+- **Conversation ID**: `d08bd109-eb6b-4efa-9e47-f3e3c2694f5e`
+- **План**: [2026-07-27_optimization.md](docs/plans/2026-07-27_optimization.md)
+- **Описание**: Оптимизация узких мест профайлера: устранение аллокаций в `FactoryNetwork.tick` и разделение `BuildingRenderer` на статический и динамический слои для поддержания 60 FPS при панорамировании 1500+ зданий без критического роста количества draw calls.
+
+---
+
 ### [2026-07-24] 🚀 **`[Коммит]`** feat: Zero-buffer pass-through logic for splitters
 - **Conversation ID**: `56640f4a-2da4-4ee4-98f8-3c0e80007974`
 

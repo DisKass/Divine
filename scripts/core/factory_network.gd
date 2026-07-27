@@ -27,6 +27,8 @@ var _building_outgoing_conns_map: Dictionary = {}
 var _credits_producers: Array[BuildingData] = [] # Cache of buildings that output credits
 var _portals: Array[BuildingData] = [] # Cache of portal buildings
 var _altars: Array[BuildingData] = [] # Cache of altar buildings
+var _temp_visited_splitters: Dictionary = {} # Pre-allocated dictionary for fast splitter checks
+
 
 ## Checks whether a rectangular area of cells is free of other buildings.
 func is_area_free(top_left: Vector2i, size_in_cells: Vector2i, ignore_building_id: int = 0) -> bool:
@@ -265,8 +267,8 @@ func tick(delta: float = 1.0, resource_mgr: ResourceManager = null, modifier_mgr
 		var from_b_first: BuildingData = outgoing_group[0][0]
 		
 		var has_any_output = false
-		for val in from_b_first.outputs.values():
-			if val >= 1.0:
+		for k in from_b_first.outputs:
+			if from_b_first.outputs[k] >= 1.0:
 				has_any_output = true
 				break
 				
@@ -301,6 +303,7 @@ func tick(delta: float = 1.0, resource_mgr: ResourceManager = null, modifier_mgr
 					continue
 					
 				if to_b.is_splitter:
+					_temp_visited_splitters.clear()
 					if _try_transfer_through_splitter(from_b, from_port, to_b, to_port, res, conn_dict):
 						from_b.last_outgoing_conn_index = (conn_idx + 1) % num_conns
 						conn_dict["last_res_index"] = (res_idx + 1) % num_res
@@ -411,10 +414,10 @@ func load_from_dict(dict: Dictionary) -> void:
 		
 	rebuild_caches()
 
-func _try_transfer_through_splitter(from_b: BuildingData, from_port: int, splitter_b: BuildingData, to_port: int, res: String, conn_dict: Dictionary, visited_splitters: Array[int] = []) -> bool:
-	if splitter_b.id in visited_splitters:
+func _try_transfer_through_splitter(from_b: BuildingData, from_port: int, splitter_b: BuildingData, to_port: int, res: String, conn_dict: Dictionary) -> bool:
+	if _temp_visited_splitters.has(splitter_b.id):
 		return false
-	visited_splitters.append(splitter_b.id)
+	_temp_visited_splitters[splitter_b.id] = true
 	
 	var outgoing: Array = _building_outgoing_conns_map.get(splitter_b.id, [])
 	var num_conns = outgoing.size()
@@ -433,7 +436,7 @@ func _try_transfer_through_splitter(from_b: BuildingData, from_port: int, splitt
 		var target_to_port: int = cache[4]
 		
 		if target_b.is_splitter:
-			if _try_transfer_through_splitter(from_b, from_port, target_b, target_to_port, res, conn_dict, visited_splitters):
+			if _try_transfer_through_splitter(from_b, from_port, target_b, target_to_port, res, conn_dict):
 				splitter_b.last_outgoing_conn_index = (conn_idx + 1) % num_conns
 				resource_transferred.emit(splitter_b.id, sp_from_port, target_b.id, target_to_port, res, 1.0, 1.0)
 				target_conn_dict["is_active"] = true

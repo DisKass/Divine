@@ -79,6 +79,7 @@ func setup(p_camera: GameCamera, p_network: FactoryNetwork, p_visuals_map: Dicti
 func _request_renderers_redraw() -> void:
 	if is_instance_valid(building_renderer):
 		building_renderer.mark_culling_dirty()
+		building_renderer.request_static_redraw()
 	if is_instance_valid(connection_renderer) and connection_renderer.has_method("mark_lines_dirty"):
 		connection_renderer.mark_lines_dirty()
 

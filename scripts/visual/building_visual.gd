@@ -164,14 +164,14 @@ static func format_resource_line(res_key: String, val: int, max_width: float, fo
 		
 	return "%s: %d" % [prefix, val]
 
-func update_text_cache() -> void:
+func update_text_cache() -> bool:
 	if data == null:
-		return
+		return false
 	if data.ui_version != _last_ui_version:
 		_last_ui_version = data.ui_version
 		text_dirty = true
 	if not text_dirty:
-		return
+		return false
 	text_dirty = false
 	_cached_title_str = data.type.capitalize()
 	_cached_in_text_lines.clear()
@@ -192,6 +192,7 @@ func update_text_cache() -> void:
 			
 	_cached_in_multiline_str = "\n".join(_cached_in_text_lines)
 	_cached_out_multiline_str = "\n".join(_cached_out_text_lines)
+	return true
 
 func request_overlay_redraw() -> void:
 	pass

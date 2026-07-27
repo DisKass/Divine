@@ -9,6 +9,18 @@ class_name BuildingRenderer
 ## 4. Building Outlines, Progress Bars, Splitter Lines, Text (BuildingRenderer Node2D, z_index = 4)
 ## 5. Splitter Ports (instanced via MultiMeshInstance2D OVER splitter lines, z_index = 6)
 
+class StaticUI extends Node2D:
+	var parent: Node2D
+	func _draw() -> void:
+		if is_instance_valid(parent):
+			parent._draw_static_layer(self)
+
+class DynamicUI extends Node2D:
+	var parent: Node2D
+	func _draw() -> void:
+		if is_instance_valid(parent):
+			parent._draw_dynamic_layer(self)
+
 var visuals_map: Dictionary = {}
 var camera: GameCamera
 var hud: Node
@@ -22,10 +34,11 @@ var _panel_texture: Texture2D
 var _last_camera_pos: Vector2 = Vector2.INF
 var _last_camera_zoom: float = -1.0
 var _culling_dirty: bool = true
-var _borders_dirty: bool = true
 var _last_visuals_count: int = -1
 
-var _cached_border_groups: Dictionary = {} # Color -> { width: float, pts: PackedVector2Array }
+var static_ui: StaticUI
+var dynamic_ui: DynamicUI
+var _static_dirty: bool = true
 
 var _cached_visible_visuals: Array[BuildingVisual] = []
 var _cached_std_visuals: Array[BuildingVisual] = []
@@ -47,14 +60,15 @@ var _splitter_in_ports_multimesh: MultiMesh
 var _splitter_out_ports_multimesh_instance: MultiMeshInstance2D
 var _splitter_out_ports_multimesh: MultiMesh
 
+func request_static_redraw() -> void:
+	_static_dirty = true
+
 func mark_culling_dirty() -> void:
 	_culling_dirty = true
-	_borders_dirty = true
-	queue_redraw()
 
 func mark_borders_dirty() -> void:
-	_borders_dirty = true
-	queue_redraw()
+	if is_instance_valid(dynamic_ui):
+		dynamic_ui.queue_redraw()
 
 func _generate_baked_port_texture(inner_color: Color) -> Texture2D:
 	var img = Image.create(32, 32, false, Image.FORMAT_RGBA8)
@@ -171,7 +185,7 @@ func _init_ports_multimeshes() -> void:
 
 func setup(p_visuals_map: Dictionary, p_camera: GameCamera = null, p_cell_size: int = 32, p_hud: Node = null) -> void:
 	z_as_relative = false
-	z_index = 4
+	z_index = 0
 	visuals_map = p_visuals_map
 	camera = p_camera
 	cell_size = p_cell_size
@@ -181,51 +195,115 @@ func setup(p_visuals_map: Dictionary, p_camera: GameCamera = null, p_cell_size: 
 	_last_camera_zoom = -1.0
 	_culling_dirty = true
 	_last_visuals_count = -1
+	_static_dirty = true
 	_init_ports_multimeshes()
+	
+	if static_ui == null:
+		static_ui = StaticUI.new()
+		static_ui.parent = self
+		static_ui.z_as_relative = false
+		static_ui.z_index = 4
+		static_ui.name = "StaticUI"
+		add_child(static_ui)
+		
+	if dynamic_ui == null:
+		dynamic_ui = DynamicUI.new()
+		dynamic_ui.parent = self
+		dynamic_ui.z_as_relative = false
+		dynamic_ui.z_index = 5
+		dynamic_ui.name = "DynamicUI"
+		add_child(dynamic_ui)
 
 func _process(delta: float) -> void:
 	if visuals_map.is_empty():
 		return
 		
-	var needs_redraw = false
-	
 	# Check camera changes for dirty redraw and frustum culling
 	if is_instance_valid(camera):
 		if camera.position != _last_camera_pos or camera.zoom.x != _last_camera_zoom:
 			_last_camera_pos = camera.position
 			_last_camera_zoom = camera.zoom.x
 			_culling_dirty = true
-			_borders_dirty = true
-			needs_redraw = true
 			
 	if visuals_map.size() != _last_visuals_count:
 		_last_visuals_count = visuals_map.size()
 		_culling_dirty = true
-		_borders_dirty = true
-		needs_redraw = true
-			
+		_static_dirty = true
+		
+	var dynamic_needs_redraw = false
+	
 	# Process timers only on flashing visuals
 	for vis in visuals_map.values():
-		if is_instance_valid(vis) and vis.is_flashing:
-			if vis._process_port_flashes(delta):
-				needs_redraw = true
+		if is_instance_valid(vis):
+			if vis.is_flashing and vis._process_port_flashes(delta):
+				dynamic_needs_redraw = true
+			if vis.data and not vis.data.is_portal and not vis.data.active_recipe.is_empty():
+				if vis.data.production_progress > 0.0 or vis.data.production_progress != vis.data._cached_duration:
+					# To be perfectly optimal we could track if progress actually changed this frame, 
+					# but since factories run smoothly, it changes every tick/frame anyway.
+					dynamic_needs_redraw = true
+					
+	if _culling_dirty:
+		_culling_dirty = false
+		_perform_culling_and_update_multimeshes()
+		dynamic_needs_redraw = true # visible set changed, need to update dynamic UI
+		
+	if _static_dirty:
+		_static_dirty = false
+		if is_instance_valid(static_ui):
+			static_ui.queue_redraw()
+			
+	if dynamic_needs_redraw and is_instance_valid(dynamic_ui):
+		dynamic_ui.queue_redraw()
+
+func _perform_culling_and_update_multimeshes() -> void:
+	var view_rect = camera.get_visible_world_rect(128.0) if is_instance_valid(camera) else Rect2(-99999, -99999, 199998, 199998)
+	_cached_visible_visuals.clear()
+	_cached_std_visuals.clear()
+	_cached_splitter_visuals.clear()
+	
+	for vis in visuals_map.values():
+		if not is_instance_valid(vis) or vis.data == null:
+			continue
+			
+		var size_px = Vector2(vis.data.size_in_cells * vis.cell_size)
+		var half_size = size_px * 0.5
+		var my_min = vis.global_position - half_size
+		var my_max = vis.global_position + half_size
+		
+		var is_in_view = not (my_max.x < view_rect.position.x or my_min.x > view_rect.end.x or \
+							  my_max.y < view_rect.position.y or my_min.y > view_rect.end.y)
+							  
+		vis.visible = is_in_view
+		if is_in_view:
+			_cached_visible_visuals.append(vis)
+			if vis.data.is_splitter:
+				_cached_splitter_visuals.append(vis)
+			else:
+				_cached_std_visuals.append(vis)
 				
-	if needs_redraw:
-		queue_redraw()
+	if is_instance_valid(hud) and hud.has_method("update_culling_stats"):
+		hud.update_culling_stats(_cached_visible_visuals.size(), visuals_map.size())
+		
+	if _cached_visible_visuals.is_empty():
+		if _panel_multimesh != null: _panel_multimesh.visible_instance_count = 0
+		if _in_ports_multimesh != null: _in_ports_multimesh.visible_instance_count = 0
+		if _out_ports_multimesh != null: _out_ports_multimesh.visible_instance_count = 0
+		if _splitter_in_ports_multimesh != null: _splitter_in_ports_multimesh.visible_instance_count = 0
+		if _splitter_out_ports_multimesh != null: _splitter_out_ports_multimesh.visible_instance_count = 0
+		return
+		
+	_update_panel_multimesh(_cached_visible_visuals)
+	_update_std_ports_multimesh(_cached_std_visuals)
+	_update_splitter_ports_multimesh(_cached_splitter_visuals)
 
 func _update_panel_multimesh(visible_visuals: Array[BuildingVisual]) -> void:
 	_init_panel_multimesh()
 	var count = visible_visuals.size()
-	if count == 0:
-		_panel_multimesh.visible_instance_count = 0
-		return
-		
 	if _panel_multimesh.instance_count < count:
 		_panel_multimesh.instance_count = max(count + 128, 256)
-		
 	_panel_multimesh.visible_instance_count = count
 	var white_color = Color.WHITE
-	
 	for i in range(count):
 		var vis = visible_visuals[i]
 		var size_px = Vector2(vis.data.size_in_cells * vis.cell_size)
@@ -241,12 +319,10 @@ func _update_std_ports_multimesh(std_visuals: Array[BuildingVisual]) -> void:
 		in_count += vis._cached_in_ports_local.size()
 		out_count += vis._cached_out_ports_local.size()
 		
-	if _in_ports_multimesh.instance_count < in_count:
-		_in_ports_multimesh.instance_count = max(in_count + 128, 256)
+	if _in_ports_multimesh.instance_count < in_count: _in_ports_multimesh.instance_count = max(in_count + 128, 256)
 	_in_ports_multimesh.visible_instance_count = in_count
 	
-	if _out_ports_multimesh.instance_count < out_count:
-		_out_ports_multimesh.instance_count = max(out_count + 128, 256)
+	if _out_ports_multimesh.instance_count < out_count: _out_ports_multimesh.instance_count = max(out_count + 128, 256)
 	_out_ports_multimesh.visible_instance_count = out_count
 	
 	var port_scale = Vector2(11.0, 11.0)
@@ -256,14 +332,10 @@ func _update_std_ports_multimesh(std_visuals: Array[BuildingVisual]) -> void:
 	var out_idx = 0
 	for vis in std_visuals:
 		var g_pos = vis.global_position
-		
-		# In ports
 		for pt in vis._cached_in_ports_local:
 			_in_ports_multimesh.set_instance_transform_2d(in_idx, Transform2D(0.0, port_scale, 0.0, g_pos + pt))
 			_in_ports_multimesh.set_instance_color(in_idx, white_color)
 			in_idx += 1
-			
-		# Out ports
 		for pt in vis._cached_out_ports_local:
 			_out_ports_multimesh.set_instance_transform_2d(out_idx, Transform2D(0.0, port_scale, 0.0, g_pos + pt))
 			_out_ports_multimesh.set_instance_color(out_idx, white_color)
@@ -277,12 +349,10 @@ func _update_splitter_ports_multimesh(splitter_visuals: Array[BuildingVisual]) -
 		in_count += vis._cached_in_ports_local.size()
 		out_count += vis._cached_out_ports_local.size()
 		
-	if _splitter_in_ports_multimesh.instance_count < in_count:
-		_splitter_in_ports_multimesh.instance_count = max(in_count + 32, 64)
+	if _splitter_in_ports_multimesh.instance_count < in_count: _splitter_in_ports_multimesh.instance_count = max(in_count + 32, 64)
 	_splitter_in_ports_multimesh.visible_instance_count = in_count
 	
-	if _splitter_out_ports_multimesh.instance_count < out_count:
-		_splitter_out_ports_multimesh.instance_count = max(out_count + 32, 64)
+	if _splitter_out_ports_multimesh.instance_count < out_count: _splitter_out_ports_multimesh.instance_count = max(out_count + 32, 64)
 	_splitter_out_ports_multimesh.visible_instance_count = out_count
 	
 	var port_scale = Vector2(11.0, 11.0)
@@ -292,200 +362,62 @@ func _update_splitter_ports_multimesh(splitter_visuals: Array[BuildingVisual]) -
 	var out_idx = 0
 	for vis in splitter_visuals:
 		var g_pos = vis.global_position
-		
-		# In ports
 		for pt in vis._cached_in_ports_local:
 			_splitter_in_ports_multimesh.set_instance_transform_2d(in_idx, Transform2D(0.0, port_scale, 0.0, g_pos + pt))
 			_splitter_in_ports_multimesh.set_instance_color(in_idx, white_color)
 			in_idx += 1
-			
-		# Out ports
 		for pt in vis._cached_out_ports_local:
 			_splitter_out_ports_multimesh.set_instance_transform_2d(out_idx, Transform2D(0.0, port_scale, 0.0, g_pos + pt))
 			_splitter_out_ports_multimesh.set_instance_color(out_idx, white_color)
 			out_idx += 1
 
-func _draw() -> void:
+func _draw_static_layer(canvas: CanvasItem) -> void:
 	if visuals_map.is_empty():
-		if _panel_multimesh != null:
-			_panel_multimesh.visible_instance_count = 0
-		if _in_ports_multimesh != null:
-			_in_ports_multimesh.visible_instance_count = 0
-		if _out_ports_multimesh != null:
-			_out_ports_multimesh.visible_instance_count = 0
-		if _splitter_in_ports_multimesh != null:
-			_splitter_in_ports_multimesh.visible_instance_count = 0
-		if _splitter_out_ports_multimesh != null:
-			_splitter_out_ports_multimesh.visible_instance_count = 0
 		return
 		
 	var font = _fallback_font
-	if font == null:
-		font = ThemeDB.fallback_font
-		
-	var view_rect = camera.get_visible_world_rect(128.0) if is_instance_valid(camera) else Rect2(-99999, -99999, 199998, 199998)
-	var current_zoom = camera.zoom.x if is_instance_valid(camera) else 1.0
-	var is_low_lod = (current_zoom < 0.45)
+	if font == null: font = ThemeDB.fallback_font
 	
-	# Collect visible building visuals (Frustum Culling) only when dirty
-	var culling_was_dirty = false
-	if _culling_dirty or _last_visuals_count != visuals_map.size():
-		culling_was_dirty = true
-		_culling_dirty = false
-		_last_visuals_count = visuals_map.size()
-		_cached_visible_visuals.clear()
-		_cached_std_visuals.clear()
-		_cached_splitter_visuals.clear()
+	var all_visuals = visuals_map.values()
+	var std_visuals: Array[BuildingVisual] = []
+	for vis in all_visuals:
+		if is_instance_valid(vis) and vis.data and not vis.data.is_splitter:
+			std_visuals.append(vis)
+			
+	# Base Borders (NO CULLING)
+	var temp_groups: Dictionary = {}
+	for vis in all_visuals:
+		if not is_instance_valid(vis) or vis.data == null: continue
+		var size_px = Vector2(vis.data.size_in_cells * vis.cell_size)
+		var top_left = vis.global_position - size_px / 2.0
+		var rect = Rect2(top_left, size_px)
+		var border_color = vis.accent_color.darkened(0.3)
+		var border_width = 2.0
+		if not temp_groups.has(border_color):
+			temp_groups[border_color] = { "rects": [], "width": border_width }
+		(temp_groups[border_color]["rects"] as Array).append(rect)
 		
-		for vis in visuals_map.values():
-			if not is_instance_valid(vis) or vis.data == null:
-				continue
-				
-			var size_px = Vector2(vis.data.size_in_cells * vis.cell_size)
-			var half_size = size_px * 0.5
-			var my_min = vis.global_position - half_size
-			var my_max = vis.global_position + half_size
-			
-			var is_in_view = not (my_max.x < view_rect.position.x or my_min.x > view_rect.end.x or \
-								  my_max.y < view_rect.position.y or my_min.y > view_rect.end.y)
-								  
-			vis.visible = is_in_view
-			if is_in_view:
-				_cached_visible_visuals.append(vis)
-				if vis.data.is_splitter:
-					_cached_splitter_visuals.append(vis)
-				else:
-					_cached_std_visuals.append(vis)
-					
-		if is_instance_valid(hud) and hud.has_method("update_culling_stats"):
-			hud.update_culling_stats(_cached_visible_visuals.size(), visuals_map.size())
-			
-	var visible_visuals = _cached_visible_visuals
-	var std_visuals = _cached_std_visuals
-	var splitter_visuals = _cached_splitter_visuals
-	
-	if visible_visuals.is_empty():
-		if _panel_multimesh != null:
-			_panel_multimesh.visible_instance_count = 0
-		if _in_ports_multimesh != null:
-			_in_ports_multimesh.visible_instance_count = 0
-		if _out_ports_multimesh != null:
-			_out_ports_multimesh.visible_instance_count = 0
-		if _splitter_in_ports_multimesh != null:
-			_splitter_in_ports_multimesh.visible_instance_count = 0
-		if _splitter_out_ports_multimesh != null:
-			_splitter_out_ports_multimesh.visible_instance_count = 0
-		return
-
-	if culling_was_dirty:
-		# Update MultiMesh GPU buffer for background panels (1 Draw Call!)
-		_update_panel_multimesh(visible_visuals)
-	
-		# Update MultiMesh GPU buffers for pre-baked procedural ports
-		_update_std_ports_multimesh(std_visuals)
-		_update_splitter_ports_multimesh(splitter_visuals)
-
-	# =========================================================================
-	# LAYER 2: Building Borders / Outlines (Batched into 1 draw_multiline per color)
-	# =========================================================================
-	if _borders_dirty or culling_was_dirty:
-		_borders_dirty = false
-		_cached_border_groups.clear()
+	for col in temp_groups:
+		var group = temp_groups[col]
+		var col_rects: Array = group["rects"]
+		var width: float = group["width"]
+		var pts = PackedVector2Array()
+		pts.resize(col_rects.size() * 8)
+		var idx = 0
+		for r in col_rects:
+			var tl = r.position
+			var tr = Vector2(r.end.x, r.position.y)
+			var br = r.end
+			var bl = Vector2(r.position.x, r.end.y)
+			pts[idx] = tl;     pts[idx + 1] = tr
+			pts[idx + 2] = tr; pts[idx + 3] = br
+			pts[idx + 4] = br; pts[idx + 5] = bl
+			pts[idx + 6] = bl; pts[idx + 7] = tl
+			idx += 8
+		canvas.draw_multiline(pts, col, width)
 		
-		var temp_groups: Dictionary = {}
-		for vis in visible_visuals:
-			var size_px = Vector2(vis.data.size_in_cells * vis.cell_size)
-			var top_left = vis.global_position - size_px / 2.0
-			var rect = Rect2(top_left, size_px)
-			
-			var border_color = vis.accent_color.darkened(0.3)
-			var border_width = 2.0
-			
-			if vis.is_invalid_drag:
-				border_color = Color(0.9, 0.25, 0.25)
-				border_width = 3.0
-			elif vis.is_selected:
-				border_color = Color(1.0, 0.9, 0.3)
-				border_width = 3.0
-			elif vis.is_hovered:
-				border_color = vis.accent_color.lightened(0.2)
-				border_width = 2.0
-				
-			if not temp_groups.has(border_color):
-				temp_groups[border_color] = { "rects": [], "width": border_width }
-			(temp_groups[border_color]["rects"] as Array).append(rect)
-			
-		for col in temp_groups:
-			var group = temp_groups[col]
-			var col_rects: Array = group["rects"]
-			var width: float = group["width"]
-			
-			var pts = PackedVector2Array()
-			pts.resize(col_rects.size() * 8)
-			var idx = 0
-			for r in col_rects:
-				var tl = r.position
-				var tr = Vector2(r.end.x, r.position.y)
-				var br = r.end
-				var bl = Vector2(r.position.x, r.end.y)
-				
-				pts[idx] = tl;     pts[idx + 1] = tr
-				pts[idx + 2] = tr; pts[idx + 3] = br
-				pts[idx + 4] = br; pts[idx + 5] = bl
-				pts[idx + 6] = bl; pts[idx + 7] = tl
-				idx += 8
-			_cached_border_groups[col] = { "width": width, "pts": pts }
-			
-	for col in _cached_border_groups:
-		var group = _cached_border_groups[col]
-		draw_multiline(group["pts"], col, group["width"])
-
-	# =========================================================================
-	# LAYER 3: Progress Bars (Standard Buildings)
-	# =========================================================================
-	if not is_low_lod:
-		var pb_bg_color = Color(0.04, 0.05, 0.06, 1.0)
-		for vis in std_visuals:
-			var data = vis.data
-			if data.is_portal or data.active_recipe.is_empty():
-				continue
-				
-			var duration = float(data._cached_duration)
-			var size_px = Vector2(data.size_in_cells * vis.cell_size)
-			var top_left = vis.global_position - size_px / 2.0
-			var bar_margin_x = 4.0
-			var bar_y = top_left.y + 18.0
-			var bar_width = size_px.x - bar_margin_x * 2.0
-			
-			if bar_width > 4.0:
-				draw_rect(Rect2(top_left.x + bar_margin_x, bar_y, bar_width, 5.0), pb_bg_color, true)
-				
-				if duration > 0.0:
-					var fill_ratio = clampf(data.production_progress / duration, 0.0, 1.0)
-					if fill_ratio > 0.0:
-						draw_rect(Rect2(top_left.x + bar_margin_x, bar_y, bar_width * fill_ratio, 5.0), vis.accent_color, true)
-
-	# =========================================================================
-	# LAYER 4: Internal Lines on Splitters
-	# =========================================================================
-	for vis in splitter_visuals:
-		var in_pt = vis.global_position + vis._cached_in_ports_local[0] if vis._cached_in_ports_local.size() > 0 else vis.global_position
-		var out_count = vis._cached_out_ports_local.size()
-		for i in range(out_count):
-			var out_pt = vis.global_position + vis._cached_out_ports_local[i]
-			var is_flashing = (i < vis.port_flash_timers.size() and vis.port_flash_timers[i] > 0.0)
-			if is_flashing:
-				var alpha = minf(1.0, vis.port_flash_timers[i] / 0.15)
-				draw_line(in_pt, out_pt, Color(1.0, 0.85, 0.2, alpha * 0.7), 6.0)
-				draw_line(in_pt, out_pt, Color(1.0, 1.0, 0.7, alpha), 3.0)
-			else:
-				draw_line(in_pt, out_pt, Color(0.35, 0.4, 0.45, 0.7), 2.0)
-
-	# =========================================================================
-	# LAYER 5: Text (Single-pass crisp text rendering)
-	# =========================================================================
-	if not is_low_lod and font != null:
-		# Pre-calculate building bounds ONCE for all std_visuals in view
+	# Text (NO CULLING)
+	if font != null:
 		var std_count = std_visuals.size()
 		var top_lefts: Array[Vector2] = []
 		var sizes_px: Array[Vector2] = []
@@ -498,14 +430,12 @@ func _draw() -> void:
 			sizes_px[idx] = sz
 			top_lefts[idx] = vis.global_position - sz * 0.5
 
-		# 5A: Title Text Fills (1 pass)
+		# Title Text Fills
 		for idx in range(std_count):
 			var vis = std_visuals[idx]
-			var tl = top_lefts[idx]
-			var sz = sizes_px[idx]
-			draw_string(font, Vector2(tl.x, tl.y + 14.0), vis._cached_title_str, HORIZONTAL_ALIGNMENT_CENTER, sz.x, 11, vis.accent_color)
+			canvas.draw_string(font, Vector2(top_lefts[idx].x, top_lefts[idx].y + 14.0), vis._cached_title_str, HORIZONTAL_ALIGNMENT_CENTER, sizes_px[idx].x, 11, vis.accent_color)
 			
-		# 5B: Resource Input Fills (1 pass)
+		# Resource Input Fills
 		var in_fill_color = Color(0.85, 0.75, 0.75)
 		for idx in range(std_count):
 			var vis = std_visuals[idx]
@@ -527,10 +457,9 @@ func _draw() -> void:
 						var avail_height = sz.y - float(vis.cell_size) - 3.0
 						var step = avail_height / float(max(1, in_count))
 						line_y = start_y + (i + 0.5) * step + 3.0
-					var line_pos = Vector2(tl.x + 4.0, line_y)
-					draw_string(font, line_pos, in_lines[i], HORIZONTAL_ALIGNMENT_LEFT, avail_w, 9, in_fill_color)
+					canvas.draw_string(font, Vector2(tl.x + 4.0, line_y), in_lines[i], HORIZONTAL_ALIGNMENT_LEFT, avail_w, 9, in_fill_color)
 
-		# 5C: Resource Output Fills (1 pass)
+		# Resource Output Fills
 		var out_fill_color = Color(0.75, 0.85, 0.75)
 		for idx in range(std_count):
 			var vis = std_visuals[idx]
@@ -552,5 +481,89 @@ func _draw() -> void:
 						var avail_height = sz.y - float(vis.cell_size) - 3.0
 						var step = avail_height / float(max(1, out_count))
 						line_y = start_y + (i + 0.5) * step + 3.0
-					var line_pos = Vector2(tl.x + 4.0, line_y)
-					draw_string(font, line_pos, out_lines[i], HORIZONTAL_ALIGNMENT_RIGHT, avail_w, 9, out_fill_color)
+					canvas.draw_string(font, Vector2(tl.x + 4.0, line_y), out_lines[i], HORIZONTAL_ALIGNMENT_RIGHT, avail_w, 9, out_fill_color)
+
+func _draw_dynamic_layer(canvas: CanvasItem) -> void:
+	if _cached_visible_visuals.is_empty():
+		return
+		
+	var current_zoom = camera.zoom.x if is_instance_valid(camera) else 1.0
+	var is_low_lod = (current_zoom < 0.45)
+	
+	# Dynamic Borders (Hovered / Selected / Invalid Drag)
+	var temp_groups: Dictionary = {}
+	for vis in _cached_visible_visuals:
+		if vis.is_invalid_drag or vis.is_selected or vis.is_hovered:
+			var size_px = Vector2(vis.data.size_in_cells * vis.cell_size)
+			var top_left = vis.global_position - size_px / 2.0
+			var rect = Rect2(top_left, size_px)
+			var border_color = vis.accent_color
+			var border_width = 2.0
+			
+			if vis.is_invalid_drag:
+				border_color = Color(0.9, 0.25, 0.25)
+				border_width = 3.0
+			elif vis.is_selected:
+				border_color = Color(1.0, 0.9, 0.3)
+				border_width = 3.0
+			elif vis.is_hovered:
+				border_color = vis.accent_color.lightened(0.2)
+				border_width = 2.0
+				
+			if not temp_groups.has(border_color):
+				temp_groups[border_color] = { "rects": [], "width": border_width }
+			(temp_groups[border_color]["rects"] as Array).append(rect)
+			
+	for col in temp_groups:
+		var group = temp_groups[col]
+		var col_rects: Array = group["rects"]
+		var width: float = group["width"]
+		var pts = PackedVector2Array()
+		pts.resize(col_rects.size() * 8)
+		var idx = 0
+		for r in col_rects:
+			var tl = r.position
+			var tr = Vector2(r.end.x, r.position.y)
+			var br = r.end
+			var bl = Vector2(r.position.x, r.end.y)
+			pts[idx] = tl;     pts[idx + 1] = tr
+			pts[idx + 2] = tr; pts[idx + 3] = br
+			pts[idx + 4] = br; pts[idx + 5] = bl
+			pts[idx + 6] = bl; pts[idx + 7] = tl
+			idx += 8
+		canvas.draw_multiline(pts, col, width)
+		
+	# Progress Bars
+	if not is_low_lod:
+		var pb_bg_color = Color(0.04, 0.05, 0.06, 1.0)
+		for vis in _cached_std_visuals:
+			var data = vis.data
+			if data.is_portal or data.active_recipe.is_empty(): continue
+				
+			var duration = float(data._cached_duration)
+			var size_px = Vector2(data.size_in_cells * vis.cell_size)
+			var top_left = vis.global_position - size_px / 2.0
+			var bar_margin_x = 4.0
+			var bar_y = top_left.y + 18.0
+			var bar_width = size_px.x - bar_margin_x * 2.0
+			
+			if bar_width > 4.0:
+				canvas.draw_rect(Rect2(top_left.x + bar_margin_x, bar_y, bar_width, 5.0), pb_bg_color, true)
+				if duration > 0.0:
+					var fill_ratio = clampf(data.production_progress / duration, 0.0, 1.0)
+					if fill_ratio > 0.0:
+						canvas.draw_rect(Rect2(top_left.x + bar_margin_x, bar_y, bar_width * fill_ratio, 5.0), vis.accent_color, true)
+						
+	# Splitter Lines
+	for vis in _cached_splitter_visuals:
+		var in_pt = vis.global_position + vis._cached_in_ports_local[0] if vis._cached_in_ports_local.size() > 0 else vis.global_position
+		var out_count = vis._cached_out_ports_local.size()
+		for i in range(out_count):
+			var out_pt = vis.global_position + vis._cached_out_ports_local[i]
+			var is_flashing = (i < vis.port_flash_timers.size() and vis.port_flash_timers[i] > 0.0)
+			if is_flashing:
+				var alpha = minf(1.0, vis.port_flash_timers[i] / 0.15)
+				canvas.draw_line(in_pt, out_pt, Color(1.0, 0.85, 0.2, alpha * 0.7), 6.0)
+				canvas.draw_line(in_pt, out_pt, Color(1.0, 1.0, 0.7, alpha), 3.0)
+			else:
+				canvas.draw_line(in_pt, out_pt, Color(0.35, 0.4, 0.45, 0.7), 2.0)
