@@ -7,26 +7,30 @@ class_name ConnectionRenderer
 @export var line_color: Color = Color(0.2, 0.6, 0.9, 0.6) # Sleek transparent blue
 @export var line_width: float = 3.0
 
-var network: FactoryNetwork
+var state: GameState
 var visuals_map: Dictionary = {}
 var camera: GameCamera
 
 # Active connection flashes: "from_id:from_port_to_id:to_port" -> Dictionary
 var active_flashes: Dictionary = {}
 
-func setup(p_network: FactoryNetwork, p_visuals_map: Dictionary, p_camera: GameCamera = null) -> void:
+func setup(p_state: GameState, p_visuals_map: Dictionary, p_camera: GameCamera = null) -> void:
 	z_as_relative = false
 	z_index = 1 # Render connection pipes completely behind building ports (2) and panels (3)
-	if is_instance_valid(network) and network.resource_transferred.is_connected(_on_resource_transferred):
-		network.resource_transferred.disconnect(_on_resource_transferred)
+	if is_instance_valid(state) and state.factory.resource_transferred.is_connected(_on_resource_transferred):
+		state.factory.resource_transferred.disconnect(_on_resource_transferred)
 		
-	network = p_network
+	state = p_state
 	visuals_map = p_visuals_map
 	camera = p_camera
 	active_flashes.clear()
+	_last_conn_count = -1
+	_lines_dirty = true
+	_cached_pipe_lines.clear()
+	queue_redraw()
 	
-	if network != null:
-		network.resource_transferred.connect(_on_resource_transferred)
+	if state != null:
+		state.factory.resource_transferred.connect(_on_resource_transferred)
 
 func _on_resource_transferred(from_id: int, from_port: int, to_id: int, to_port: int, resource_name: String, _amount: float, _transfer_rate: float) -> void:
 	var from_vis: BuildingVisual = visuals_map.get(from_id)
@@ -64,7 +68,7 @@ func mark_lines_dirty() -> void:
 	queue_redraw()
 
 func _process(delta: float) -> void:
-	if network == null or visuals_map.is_empty():
+	if state == null or visuals_map.is_empty():
 		return
 		
 	var needs_redraw = false
@@ -75,8 +79,8 @@ func _process(delta: float) -> void:
 			_last_camera_zoom = camera.zoom.x
 			needs_redraw = true
 			
-	if network.connections.size() != _last_conn_count:
-		_last_conn_count = network.connections.size()
+	if state.factory.connections.size() != _last_conn_count:
+		_last_conn_count = state.factory.connections.size()
 		_lines_dirty = true
 		needs_redraw = true
 			
@@ -97,7 +101,7 @@ func _process(delta: float) -> void:
 		queue_redraw()
 
 func _draw() -> void:
-	if network == null or visuals_map.is_empty():
+	if state == null or visuals_map.is_empty():
 		return
 		
 	var view_rect = camera.get_visible_world_rect(128.0) if is_instance_valid(camera) else Rect2(-99999, -99999, 199998, 199998)
@@ -105,7 +109,7 @@ func _draw() -> void:
 	if _lines_dirty:
 		_lines_dirty = false
 		_cached_pipe_lines.clear()
-		for conn in network.connections:
+		for conn in state.factory.connections:
 			var from_id = conn["from_id"]
 			var from_port = int(conn.get("from_port", 0))
 			var to_id = conn["to_id"]

@@ -8,8 +8,7 @@ signal closed
 @onready var close_btn: Button = $MarginContainer/VBoxContainer/HeaderHBox/CloseBtn
 @onready var cards_vbox: VBoxContainer = $MarginContainer/VBoxContainer/ScrollContainer/CardsVBox
 
-var res_mgr: ResourceManager
-var upg_mgr: UpgradesManager
+var state: GameState
 var upgrade_cards: Dictionary = {}
 
 func _ready() -> void:
@@ -18,21 +17,19 @@ func _ready() -> void:
 		closed.emit()
 	)
 
-func setup_new(p_res_mgr: ResourceManager, p_upg_mgr: UpgradesManager) -> void:
-	res_mgr = p_res_mgr
-	upg_mgr = p_upg_mgr
+func setup_new(p_state: GameState) -> void:
+	state = p_state
 	
 	if cards_vbox.get_child_count() == 0:
 		_build_cards()
 		
-	if not upg_mgr.upgrade_purchased.is_connected(_on_upgrade_purchased):
-		upg_mgr.upgrade_purchased.connect(_on_upgrade_purchased)
-	if not upg_mgr.upgrades_reset.is_connected(update_shop):
-		upg_mgr.upgrades_reset.connect(update_shop)
+	if not state.upgrade_purchased.is_connected(_on_upgrade_purchased):
+		state.upgrade_purchased.connect(_on_upgrade_purchased)
 
 func _build_cards() -> void:
-	for up_id in upg_mgr.upgrade_configs:
-		var config: UpgradeData = upg_mgr.upgrade_configs[up_id]
+	UpgradeSystem.ensure_configs_loaded()
+	for up_id in UpgradeSystem.upgrade_configs.keys():
+		var config: UpgradeData = UpgradeSystem.upgrade_configs[up_id]
 		var card = PanelContainer.new()
 		card.custom_minimum_size = Vector2(0, 80)
 		
@@ -85,8 +82,8 @@ func _build_cards() -> void:
 		buy_btn.custom_minimum_size = Vector2(110, 0)
 		buy_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		buy_btn.pressed.connect(func():
-			if is_instance_valid(upg_mgr):
-				upg_mgr.buy_upgrade(up_id)
+			if state != null:
+				UpgradeSystem.buy_upgrade(state, up_id)
 				update_shop()
 		)
 		c_hbox.add_child(buy_btn)
@@ -99,12 +96,13 @@ func _build_cards() -> void:
 		}
 
 func update_shop() -> void:
-	if upg_mgr == null: return
+	if state == null: return
 		
+	UpgradeSystem.ensure_configs_loaded()
 	for up_id in upgrade_cards:
 		var refs: Dictionary = upgrade_cards[up_id]
-		var config: UpgradeData = upg_mgr.upgrade_configs[up_id]
-		var lvl = upg_mgr.get_upgrade_level(up_id)
+		var config: UpgradeData = UpgradeSystem.upgrade_configs[up_id]
+		var lvl = UpgradeSystem.get_upgrade_level(state, up_id)
 		var max_lvl = config.max_level
 		
 		# We must calculate bonus safely from modifier_manager, 
@@ -122,10 +120,10 @@ func update_shop() -> void:
 			buy_btn.text = "MAX LEVEL"
 			buy_btn.disabled = true
 		else:
-			var cost = upg_mgr.get_upgrade_cost(up_id)
+			var cost = UpgradeSystem.get_upgrade_cost(state, up_id)
 			var cost_val = cost.get("credits", 0.0)
 			buy_btn.text = "Lvl %d ($%.1f)" % [lvl + 1, cost_val]
-			buy_btn.disabled = not upg_mgr.can_afford_upgrade(up_id)
+			buy_btn.disabled = not UpgradeSystem.can_afford_upgrade(state, up_id)
 
 func _on_upgrade_purchased(_up_id: String, _level: int) -> void:
 	update_shop()

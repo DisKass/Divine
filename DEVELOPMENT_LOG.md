@@ -4,6 +4,26 @@
 
 ---
 
+### [2026-07-31] 🚀 **`[Коммит]`** refactor: All Managers to Systems architecture rebuild and save-game stutter elimination
+- **Conversation ID**: `812030af-9e7f-4640-9950-fa0d1566b48b`
+
+### Фактические изменения
+1. **Масштабный рефакторинг архитектуры**: Удалены синглтоны-менеджеры, вся игровая логика переведена на статические системы (GridSystem, FlowSystem, ProductionSystem, TemplateSystem и др.) с использованием единого передаваемого стейта `GameState`.
+2. **Очистка и оптимизация симуляции**: Снята нагрузка с `input_controller.gd` за счет паттерна состояний, логика отрисовки голограмм перенесена в отдельный компонент. Избавились от аббревиатур.
+3. **Исправление UI и Портала**: Кнопка `Equip` у артефактов снова работает. Портал корректно обновляется при прохождении майлстоунов без накопления лишних ресурсов.
+4. **Устранение фризов автосохранения**: Сохранение игры полностью вынесено в асинхронный фоновый поток (Thread) с 5-секундным троттлингом (debounce). Исчезли долгие микрофризы при любом движении или установке фабрик.
+
+### [2026-07-30] 📋 **`[План]`** All Managers to Systems Refactoring
+- **Conversation ID**: `812030af-9e7f-4640-9950-fa0d1566b48b`
+- **План**: [2026-07-30_all_managers_to_systems.md](docs/plans/2026-07-30_all_managers_to_systems.md)
+- **Описание**: Масштабный рефакторинг `core`. Удаление всех менеджеров (ResourceManager, BuildingManager, UpgradesManager, и т.д.) и замена их на статические системы. Перевод всей информации о симуляции в глобальный композитный контейнер данных `GameState` (состоящий из FactoryState, EconomyState и ProgressState).
+
+### [2026-07-30] 📋 **`[План]`** Systems Architecture and Visuals Refactoring
+- **Conversation ID**: `812030af-9e7f-4640-9950-fa0d1566b48b`
+- **План**: [2026-07-30_systems_architecture_refactoring.md](docs/plans/2026-07-30_systems_architecture_refactoring.md)
+- **Описание**: Масштабный рефакторинг `core` для перехода к Data-Driven Systems (разделение `factory_network.gd` на `GridSystem`, `FlowSystem`, `ProductionSystem`). Разгрузка `input_controller.gd` с помощью паттерна состояний и вынос отрисовки голограмм в отдельный `HologramManager`. Очистка кода от аббревиатур.
+
+
 ### [2026-07-27] 🚀 **`[Коммит]`** fix: Dragging buildings FPS drop and dynamic text update
 - **Conversation ID**: `d08bd109-eb6b-4efa-9e47-f3e3c2694f5e`
 

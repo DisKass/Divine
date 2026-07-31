@@ -171,6 +171,7 @@ func update_text_cache() -> bool:
 	if data.ui_version != _last_ui_version:
 		_last_ui_version = data.ui_version
 		text_dirty = true
+		_update_ports_cache()
 	if not text_dirty:
 		return false
 	text_dirty = false

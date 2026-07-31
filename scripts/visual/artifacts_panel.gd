@@ -11,7 +11,7 @@ signal closed
 @onready var inventory_vbox: VBoxContainer = $MarginContainer/VBoxContainer/ScrollContainer/InventoryVBox
 @onready var empty_inventory_label: Label = $MarginContainer/VBoxContainer/ScrollContainer/InventoryVBox/EmptyLabel
 
-var art_mgr: ArtifactsManager
+var state: GameState
 var slot_cards: Array[Dictionary] = []
 var inventory_cards: Dictionary = {}
 
@@ -21,17 +21,24 @@ func _ready() -> void:
 		closed.emit()
 	)
 
-func setup_new(p_art_mgr: ArtifactsManager) -> void:
-	art_mgr = p_art_mgr
+func setup_new(p_state: GameState) -> void:
+	if state != null and state.artifact_crafted.is_connected(_on_artifact_crafted):
+		state.artifact_crafted.disconnect(_on_artifact_crafted)
+		state.artifact_equipped.disconnect(_on_artifact_equipped)
+		state.artifact_unequipped.disconnect(_on_artifact_unequipped)
+		state.artifacts_changed.disconnect(update_panel)
+		
+	state = p_state
+	
+	if state != null and not state.artifact_crafted.is_connected(_on_artifact_crafted):
+		state.artifact_crafted.connect(_on_artifact_crafted)
+		state.artifact_equipped.connect(_on_artifact_equipped)
+		state.artifact_unequipped.connect(_on_artifact_unequipped)
+		state.artifacts_changed.connect(update_panel)
 	
 	if slot_cards.is_empty():
 		_build_slots()
 		_build_inventory()
-		
-	if not art_mgr.artifact_crafted.is_connected(_on_artifact_crafted):
-		art_mgr.artifact_crafted.connect(_on_artifact_crafted)
-		art_mgr.artifact_equipped.connect(_on_artifact_equipped)
-		art_mgr.artifact_unequipped.connect(_on_artifact_unequipped)
 
 func _build_slots() -> void:
 	for i in range(2):
@@ -82,8 +89,7 @@ func _build_slots() -> void:
 		unequip_btn.custom_minimum_size = Vector2(65, 0)
 		unequip_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		unequip_btn.pressed.connect(func():
-			if is_instance_valid(art_mgr):
-				art_mgr.unequip_artifact(i)
+			ArtifactSystem.unequip_artifact(state, i)
 		)
 		hbox.add_child(unequip_btn)
 		
@@ -95,8 +101,9 @@ func _build_slots() -> void:
 		})
 
 func _build_inventory() -> void:
-	for art_id in art_mgr.artifact_configs:
-		var config: ArtifactData = art_mgr.artifact_configs[art_id]
+	ArtifactSystem.ensure_configs_loaded()
+	for a_id in ArtifactSystem.artifact_configs.keys():
+		var config: ArtifactData = ArtifactSystem.artifact_configs[a_id]
 		
 		var card = PanelContainer.new()
 		card.custom_minimum_size = Vector2(0, 56)
@@ -147,32 +154,31 @@ func _build_inventory() -> void:
 		equip_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		
 		equip_btn.pressed.connect(func():
-			if is_instance_valid(art_mgr):
-				art_mgr.equip_artifact(art_id)
+			ArtifactSystem.equip_artifact(state, a_id)
 		)
 		hbox.add_child(equip_btn)
 		
 		inventory_vbox.add_child(card)
-		inventory_cards[art_id] = {
+		inventory_cards[a_id] = {
 			"card_panel": card,
 			"title_label": title_lbl,
 			"equip_button": equip_btn
 		}
 
 func update_panel() -> void:
-	if art_mgr == null: return
+	if state == null: return
 		
 	# Update slots
 	for i in range(2):
 		var refs: Dictionary = slot_cards[i]
-		var art_id = art_mgr.equipped_artifacts[i] if i < art_mgr.equipped_artifacts.size() else ""
+		var item = state.progress.equipped_artifacts[i] if i < state.progress.equipped_artifacts.size() else ""
 		var title_lbl: Label = refs["title_label"]
 		var desc_lbl: Label = refs["desc_label"]
 		var unequip_btn: Button = refs["unequip_button"]
 		
-		if art_id != "" and art_mgr.artifact_configs.has(art_id):
-			var config: ArtifactData = art_mgr.artifact_configs[art_id]
-			title_lbl.text = "Slot %d: %s" % [i + 1, config.name if config.name != "" else art_id]
+		if item != "" and ArtifactSystem.artifact_configs.has(item):
+			var config: ArtifactData = ArtifactSystem.artifact_configs[item]
+			title_lbl.text = "Slot %d: %s" % [i + 1, config.name if config.name != "" else item]
 			desc_lbl.text = config.description
 			unequip_btn.visible = true
 		else:
@@ -182,12 +188,12 @@ func update_panel() -> void:
 			
 	# Update Summary
 	var summary_parts: Array[String] = []
-	var f_bonus = art_mgr.modifier_manager.get_multiplier("factory_speed") - 1.0 # Only works for artifacts roughly, we can just display the total multiplier
-	if f_bonus > 0.001: summary_parts.append("+%.0f%% Factory Speed" % (f_bonus * 100.0))
-	var m_bonus = art_mgr.modifier_manager.get_multiplier("miner_speed") - 1.0
-	if m_bonus > 0.001: summary_parts.append("+%.0f%% Mining Speed" % (m_bonus * 100.0))
-	var s_bonus = art_mgr.modifier_manager.get_multiplier("sell_price_mult") - 1.0
-	if s_bonus > 0.001: summary_parts.append("+%.0f%% Sell Income" % (s_bonus * 100.0))
+	var fs_mult = ModifierSystem.get_multiplier(state, "factory_speed") - 1.0
+	if fs_mult > 0.001: summary_parts.append("+%.0f%% Factory Speed" % (fs_mult * 100.0))
+	var ms_mult = ModifierSystem.get_multiplier(state, "miner_speed") - 1.0
+	if ms_mult > 0.001: summary_parts.append("+%.0f%% Mining Speed" % (ms_mult * 100.0))
+	var tr_mult = ModifierSystem.get_multiplier(state, "logistics_transfer") - 1.0
+	if tr_mult > 0.001: summary_parts.append("+%.0f%% Transfer Speed" % (tr_mult * 100.0))
 	
 	if summary_parts.is_empty():
 		summary_label.text = "Active Modifiers: None"
@@ -200,8 +206,9 @@ func update_panel() -> void:
 		var refs: Dictionary = inventory_cards[art_id]
 		var card_panel: PanelContainer = refs["card_panel"]
 		var title_lbl: Label = refs["title_label"]
-		var config: ArtifactData = art_mgr.artifact_configs[art_id]
-		var cnt = int(art_mgr.artifact_inventory.get(art_id, 0))
+		ArtifactSystem.ensure_configs_loaded()
+		var config: ArtifactData = ArtifactSystem.artifact_configs[art_id]
+		var cnt = state.progress.artifact_inventory.get(art_id, 0)
 		
 		if cnt > 0:
 			has_items = true

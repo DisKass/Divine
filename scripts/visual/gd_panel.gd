@@ -3,10 +3,7 @@ class_name GDPanel
 
 ## Game Designer / Debug panel for testing, free building mode, and template switching.
 
-var milestones_mgr: MilestonesManager
-var upgrades_mgr: UpgradesManager
-var building_mgr: BuildingManager
-var template_mgr: TemplateManager
+var state: GameState
 var main_game: MainGame
 
 var close_btn: Button
@@ -23,12 +20,9 @@ var create_dialog: ConfirmationDialog
 var confirm_delete_dialog: ConfirmationDialog
 var dialog_name_edit: LineEdit
 
-func setup(p_ms_mgr: MilestonesManager, p_upg_mgr: UpgradesManager, p_main_game: MainGame = null, p_build_mgr: BuildingManager = null, p_template_mgr: TemplateManager = null) -> void:
-	milestones_mgr = p_ms_mgr
-	upgrades_mgr = p_upg_mgr
+func setup(p_state: GameState, p_main_game: MainGame = null) -> void:
+	state = p_state
 	main_game = p_main_game
-	building_mgr = p_build_mgr
-	template_mgr = p_template_mgr
 	
 	_build_ui()
 	_setup_dialogs()
@@ -93,8 +87,8 @@ func _build_ui() -> void:
 	free_build_check = CheckBox.new()
 	free_build_check.text = "🆓 Бесплатная постройка"
 	free_build_check.add_theme_font_size_override("font_size", 11)
-	if building_mgr != null:
-		free_build_check.button_pressed = building_mgr.free_buildings_mode
+	if state != null:
+		free_build_check.button_pressed = state.free_buildings_mode
 	free_build_check.toggled.connect(_on_free_build_toggled)
 	content_vbox.add_child(free_build_check)
 	
@@ -201,20 +195,20 @@ func _setup_dialogs() -> void:
 	confirm_delete_dialog.confirmed.connect(_on_confirm_delete_dialog_confirmed)
 
 func _refresh_templates_dropdown() -> void:
-	if templates_dropdown == null or template_mgr == null:
+	if templates_dropdown == null or state == null:
 		return
 		
 	templates_dropdown.clear()
 	# Index 0 is always "Create New"
 	templates_dropdown.add_item("➕ Создать новый...", 0)
 	
-	var active_id = template_mgr.active_template_id
+	var active_id = state.active_template_id
 	var select_idx = 0
 	
-	var keys = template_mgr.templates.keys()
+	var keys = state.templates.keys()
 	for i in range(keys.size()):
 		var t_id = keys[i]
-		var t_data = template_mgr.templates[t_id]
+		var t_data = state.templates[t_id]
 		var t_name = t_data.get("name", "Темплейт")
 		var idx = i + 1
 		templates_dropdown.add_item(t_name, idx)
@@ -226,13 +220,13 @@ func _refresh_templates_dropdown() -> void:
 	templates_dropdown.select(select_idx)
 
 func _on_free_build_toggled(toggled: bool) -> void:
-	if building_mgr != null:
-		building_mgr.free_buildings_mode = toggled
+	if state != null:
+		state.free_buildings_mode = toggled
 
 func _on_template_option_selected(idx: int) -> void:
 	if idx == 0:
 		# Create New Template
-		dialog_name_edit.text = "Темплейт " + str(template_mgr.templates.size() + 1)
+		dialog_name_edit.text = "Темплейт " + str(state.templates.size() + 1)
 		create_dialog.popup_centered(Vector2i(300, 130))
 	else:
 		# Switch to selected existing template
@@ -254,7 +248,7 @@ func _on_reset_template_pressed() -> void:
 
 func _on_delete_template_pressed() -> void:
 	if confirm_delete_dialog != null:
-		var active_name = template_mgr.get_active_template_name() if template_mgr != null else ""
+		var active_name = TemplateSystem.get_active_template_name(state) if state != null else ""
 		confirm_delete_dialog.dialog_text = "Удалить темплейт '%s'?" % active_name
 		confirm_delete_dialog.popup_centered(Vector2i(320, 110))
 
@@ -264,15 +258,15 @@ func _on_confirm_delete_dialog_confirmed() -> void:
 		_refresh_templates_dropdown()
 
 func _on_reset_phase_pressed() -> void:
-	if milestones_mgr != null:
-		milestones_mgr.reset_milestone_progress()
+	if state != null:
+		MilestoneSystem.reset_milestone_progress(state)
 		if main_game != null and main_game.has_method("_update_ui"):
 			main_game.call("_update_ui")
 			main_game.call("_update_inspector")
 
 func _on_reset_upgrades_pressed() -> void:
-	if upgrades_mgr != null:
-		upgrades_mgr.reset_upgrades()
+	if state != null:
+		UpgradeSystem.reset_upgrades(state)
 		if main_game != null and main_game.has_method("_update_ui"):
 			main_game.call("_update_ui")
 

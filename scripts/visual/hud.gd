@@ -265,23 +265,23 @@ func _on_building_button_pressed(b_type: String) -> void:
 	else:
 		mode_changed.emit(1, b_type) # Mode 1 = BUILD
 
-func update_hud_new(res_mgr: ResourceManager, build_mgr: BuildingManager, upg_mgr: UpgradesManager, art_mgr: ArtifactsManager, ms_mgr: MilestonesManager, credits_per_tick: float, current_mode: int, selected_build_type: String) -> void:
+func update_hud_new(state: GameState, credits_per_tick: float, current_mode: int, selected_build_type: String) -> void:
 	if is_instance_valid(shop_panel):
 		if not shop_panel.has_method("setup_new") and shop_panel.has_method("setup"):
 			pass # waiting for shop panel refactoring
 		elif shop_panel.has_method("setup_new"):
-			shop_panel.setup_new(res_mgr, upg_mgr)
+			shop_panel.setup_new(state)
 			if shop_panel.visible:
 				shop_panel.update_shop()
 
 	if is_instance_valid(artifacts_panel):
 		if artifacts_panel.has_method("setup_new"):
-			artifacts_panel.setup_new(art_mgr)
+			artifacts_panel.setup_new(state)
 
-	var credits = res_mgr.get_resource("credits")
+	var credits = ResourceSystem.get_resource(state, "credits")
 	credits_label.text = "Credits: $%.1f (+%.1f/s)" % [credits, credits_per_tick]
 	
-	var m_info = ms_mgr.get_current_milestone()
+	var m_info = MilestoneSystem.get_current_milestone(state)
 	if m_info.get("completed_all", false):
 		milestone_label.text = "Milestone: All Tiers Completed! 🏆"
 	else:
@@ -301,8 +301,9 @@ func update_hud_new(res_mgr: ResourceManager, build_mgr: BuildingManager, upg_mg
 	var total_buildings = 0
 	var popup = stats_menu.get_popup()
 	popup.clear()
-	for type in build_mgr.building_counts:
-		var count = build_mgr.building_counts[type]
+	var building_counts = BuildingSystem.get_building_counts(state)
+	for type in building_counts:
+		var count = building_counts[type]
 		if count > 0:
 			var display_name = type.capitalize()
 			if type.begins_with("splitter_"): display_name = "Splitter (" + type.replace("splitter_", "") + ")"
@@ -330,10 +331,10 @@ func update_hud_new(res_mgr: ResourceManager, build_mgr: BuildingManager, upg_mg
 	for b_type in card_types:
 		if tool_buttons.has(b_type):
 			var btn: Button = tool_buttons[b_type]
-			var is_unlocked = build_mgr.is_building_unlocked(b_type)
-			var req_tier = build_mgr.get_building_required_tier(b_type)
-			var limit_reached = build_mgr.is_building_limit_reached(b_type)
-			var cost = build_mgr.get_building_cost(b_type)
+			var is_unlocked = BuildingSystem.is_building_unlocked(state, b_type)
+			var req_tier = BuildingSystem.get_building_required_tier(b_type)
+			var limit_reached = BuildingSystem.is_building_limit_reached(state, b_type)
+			var cost = BuildingSystem.get_building_cost(state, b_type)
 			var price_lbl = tool_cost_labels.get(b_type)
 			
 			if price_lbl:
@@ -348,7 +349,7 @@ func update_hud_new(res_mgr: ResourceManager, build_mgr: BuildingManager, upg_mg
 					price_lbl.text = "$%.1f" % cost_val
 					
 			var is_selected_type = (current_mode == 1 and selected_build_type == b_type)
-			if (not is_unlocked or limit_reached or not build_mgr.can_afford(b_type)) and not is_selected_type:
+			if (not is_unlocked or limit_reached or not BuildingSystem.can_afford(state, b_type)) and not is_selected_type:
 				btn.disabled = true
 				if price_lbl:
 					if not is_unlocked:

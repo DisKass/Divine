@@ -18,15 +18,9 @@ var link_source_id: int = 0
 var copy_data: Dictionary = {} # { "buildings": Array, "connections": Array, "bounds_size": Vector2i, "total_cost": Dictionary }
 
 # Core Managers
-var network: FactoryNetwork
-var resource_manager: ResourceManager
-var modifier_manager: ModifierManager
-var milestones_manager: MilestonesManager
-var artifacts_manager: ArtifactsManager
-var building_manager: BuildingManager
-var upgrades_manager: UpgradesManager
-var template_manager: TemplateManager
+var state: GameState
 var ticker: SimulationTicker
+var input_controller: InputController
 
 # Visual maps: building_id -> BuildingVisual
 var visuals_map: Dictionary = {}
@@ -39,8 +33,11 @@ var building_renderer: BuildingRenderer
 var buildings_container: Node2D
 var build_preview: PanelContainer
 
+var _needs_save: bool = false
+var _time_since_last_save: float = 0.0
+
 # Input Controller
-var input_controller: InputController
+
 
 # UI References (Instantiated from scenes)
 var hud: HUD
@@ -117,7 +114,7 @@ func _ready() -> void:
 	hud.gd_panel = gd_panel
 	gd_panel.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
 	gd_panel.visible = false
-	gd_panel.setup(milestones_manager, upgrades_manager, self, building_manager, template_manager)
+	gd_panel.setup(state, self)
 	
 	# Connect to tick signal to update UI
 	ticker.tick_completed.connect(_on_simulation_tick)
@@ -126,74 +123,75 @@ func _ready() -> void:
 	_update_ui()
 
 func _initialize_game() -> void:
-	var save_data = SaveManager.load_game()
+	state = GameState.new()
 	
-	resource_manager = ResourceManager.new()
-	modifier_manager = ModifierManager.new()
-	milestones_manager = MilestonesManager.new()
-	artifacts_manager = ArtifactsManager.new(modifier_manager)
-	building_manager = BuildingManager.new(resource_manager, milestones_manager)
-	upgrades_manager = UpgradesManager.new(resource_manager, modifier_manager)
-	template_manager = TemplateManager.new()
-	network = FactoryNetwork.new()
+	if not SaveSystem.load_game(state):
+		ResourceSystem.add_resource(state, "credits", 85.0)
+		
+	ticker = SimulationTicker.new(state)
 	
-	if not save_data.is_empty():
-		var tpl_dict = save_data.get("template_manager_dict", {})
-		if not tpl_dict.is_empty():
-			template_manager.from_dict(tpl_dict)
-			
-		var active_snap = template_manager.templates.get(template_manager.active_template_id, {}).get("snapshot", {})
-		if not active_snap.is_empty():
-			TemplateManager.apply_snapshot(active_snap, network, resource_manager, building_manager, upgrades_manager, artifacts_manager, milestones_manager)
-		else:
-			var net_dict = save_data.get("network_dict", {})
-			network = FactoryNetwork.from_dict(net_dict)
-			resource_manager.from_dict(save_data.get("resource_manager_dict", {}))
-			building_manager.from_dict(save_data.get("building_manager_dict", {}))
-			upgrades_manager.from_dict(save_data.get("upgrades_manager_dict", {}))
-			artifacts_manager.from_dict(save_data.get("artifacts_manager_dict", {}))
-			milestones_manager.from_dict(save_data.get("milestones_manager_dict", {}))
-			
-		var saved_time = save_data.get("timestamp", int(Time.get_unix_time_from_system()))
+	for b_id in state.factory.buildings:
+		_create_building_visual(state.factory.buildings[b_id])
 		
-		# Migrate old starting credits (50$) to new 85$ for fresh profiles
-		var total_buildings = network.buildings.size()
-		if total_buildings == 0 and resource_manager.get_resource("credits") < 85.0:
-			resource_manager.add_resource("credits", 85.0 - resource_manager.get_resource("credits"))
-			
-		ticker = SimulationTicker.new(network, resource_manager, modifier_manager, milestones_manager, artifacts_manager)
-		
-		# Instantiate visual nodes for all loaded buildings
-		for b_id in network.buildings:
-			var b_data = network.buildings[b_id]
-			_create_building_visual(b_data)
-			
-		# Handle offline catch-up
-		var catchup = ticker.catch_up_offline(saved_time)
-		if catchup["simulated_ticks"] > 0:
-			_show_offline_catchup_popup(catchup)
-	else:
-		# Initial state
-		ticker = SimulationTicker.new(network, resource_manager, modifier_manager, milestones_manager, artifacts_manager)
-		
-	milestones_manager.milestone_completed.connect(func(_t, _d):
-		if network:
-			network.sync_portal_inputs(milestones_manager)
+	ticker.time_accumulator = 0.0
+
+	state.milestone_completed.connect(func(_t, _d):
+		if state:
+			FlowSystem.sync_portal_inputs(state)
+			state.factory.rebuild_caches()
 	)
-	milestones_manager.milestone_reset.connect(func():
-		if network:
-			network.sync_portal_inputs(milestones_manager)
+	state.milestone_reset.connect(func():
+		if state:
+			FlowSystem.sync_portal_inputs(state)
+			state.factory.rebuild_caches()
 	)
-	network.sync_portal_inputs(milestones_manager)
+	FlowSystem.sync_portal_inputs(state)
 
 	building_renderer.setup(visuals_map, camera, cell_size, hud)
-	connection_renderer.setup(network, visuals_map, camera)
+	connection_renderer.setup(state, visuals_map, camera)
 	if is_instance_valid(input_controller):
-		input_controller.setup(camera, network, visuals_map, build_preview, building_renderer, connection_renderer)
+		input_controller.setup(camera, state, visuals_map, build_preview, building_renderer, connection_renderer)
+
+func _reset(clear_save: bool = false) -> void:
+	if clear_save:
+		SaveSystem.delete_save()
+	
+	for v in visuals_map.values():
+		if is_instance_valid(v):
+			v.queue_free()
+	visuals_map.clear()
+	
+	if is_instance_valid(input_controller):
+		input_controller.set_selected_buildings([])
+		input_controller.copy_preview_info.clear()
+		
+	selected_building_id = 0
+	inspector_panel.visible = false
+	
+	_initialize_game()
+	
+	if is_instance_valid(building_renderer):
+		building_renderer.setup(visuals_map, camera, cell_size, hud)
+	if is_instance_valid(connection_renderer):
+		connection_renderer.setup(state, visuals_map, camera)
+	if is_instance_valid(input_controller):
+		input_controller.setup(camera, state, visuals_map, build_preview, building_renderer, connection_renderer)
+	
+	for b_id in state.factory.buildings:
+		_create_building_visual(state.factory.buildings[b_id])
+
+func request_save() -> void:
+	_needs_save = true
 
 func _process(delta: float) -> void:
 	# Run simulation ticker ticks
 	ticker.process_realtime(delta)
+	
+	_time_since_last_save += delta
+	if _needs_save and _time_since_last_save >= 5.0:
+		SaveSystem.save_game(state)
+		_needs_save = false
+		_time_since_last_save = 0.0
 	
 	# Color red if blocked, green if empty and affordable (BUILD preview)
 	if current_mode == MouseMode.BUILD and is_instance_valid(input_controller):
@@ -201,10 +199,10 @@ func _process(delta: float) -> void:
 		var b_size = BuildingData.get_default_size(selected_build_type)
 		var style = build_preview.get_theme_stylebox("panel") as StyleBoxFlat
 		if style:
-			if not network.is_area_free(grid_pos, b_size):
+			if not GridSystem.is_area_free(state.factory, grid_pos, b_size):
 				style.border_color = Color(0.9, 0.25, 0.25, 0.8) # Red (blocked)
 				style.bg_color = Color(0.9, 0.25, 0.25, 0.15)
-			elif not building_manager.can_afford(selected_build_type):
+			elif not BuildingSystem.can_afford(state, selected_build_type):
 				style.border_color = Color(0.9, 0.6, 0.1, 0.8) # Orange (unaffordable)
 				style.bg_color = Color(0.9, 0.6, 0.1, 0.1)
 			else:
@@ -220,12 +218,12 @@ func _process(delta: float) -> void:
 			var rel_pos: Vector2i = b["relative_pos"]
 			var b_size: Vector2i = b["size"]
 			var cell_pos = origin_grid + rel_pos
-			if not network.is_area_free(cell_pos, b_size):
+			if not GridSystem.is_area_free(state.factory, cell_pos, b_size):
 				is_valid = false
 				break
 				
 		var total_cost = copy_data.get("total_cost", {})
-		var can_afford = resource_manager.can_afford(total_cost) if not building_manager.free_buildings_mode else true
+		var can_afford = ResourceSystem.can_afford(state, total_cost) if not state.free_buildings_mode else true
 		
 		input_controller.copy_preview_info = {
 			"buildings": b_list,
@@ -240,7 +238,7 @@ func _process(delta: float) -> void:
 	save_timer += delta
 	if save_timer >= AUTO_SAVE_INTERVAL:
 		save_timer = 0.0
-		SaveManager.save_game(network, resource_manager, building_manager, upgrades_manager, artifacts_manager, milestones_manager, template_manager)
+		request_save()
 
 func _handle_inspect(building_id: int) -> void:
 	# Deselect current
@@ -261,19 +259,22 @@ func _handle_inspect(building_id: int) -> void:
 func _handle_build(grid_pos: Vector2i) -> void:
 	var default_rec = default_recipes.get(selected_build_type, {})
 	var b_size = BuildingData.get_default_size(selected_build_type)
-	if not network.is_area_free(grid_pos, b_size):
+	if not GridSystem.is_area_free(state.factory, grid_pos, b_size):
 		return # Blocked
 
-	if not building_manager.can_afford(selected_build_type):
+	if not BuildingSystem.can_afford(state, selected_build_type):
 		return # Cannot afford
 		
 	# Process purchase
-	if building_manager.buy_building(selected_build_type):
+	if BuildingSystem.buy_building(state, selected_build_type):
 		var recipe = default_rec.duplicate(true) if not default_rec.is_empty() else {}
-		var b_data = network.add_building(selected_build_type, grid_pos, recipe)
-		if selected_build_type == "portal":
-			network.sync_portal_inputs(milestones_manager)
-		_create_building_visual(b_data)
+		var b_data = BuildingSystem.place_building(state, selected_build_type, grid_pos)
+		if b_data and not recipe.is_empty():
+			b_data.set_recipe(recipe)
+		if b_data and selected_build_type == "portal":
+			FlowSystem.sync_portal_inputs(state)
+		if b_data:
+			_create_building_visual(b_data)
 		_update_ui()
 		
 		# If Shift is NOT held, cancel build selection after 1 placement
@@ -298,8 +299,8 @@ func _handle_link(building_id: int) -> void:
 		# We clicked the target building
 		if link_source_id != building_id:
 			var target_port = 0
-			var source_b = network.buildings.get(link_source_id)
-			var target_b = network.buildings.get(building_id)
+			var source_b = state.factory.buildings.get(link_source_id)
+			var target_b = state.factory.buildings.get(building_id)
 			var target_vis = visuals_map.get(building_id)
 			
 			if source_b and target_b:
@@ -320,25 +321,23 @@ func _handle_link(building_id: int) -> void:
 				if source_res != "" and is_instance_valid(target_vis):
 					target_port = target_vis.get_input_port_for_resource(source_res)
 					
-			network.add_connection(link_source_id, building_id, link_source_port, target_port)
+			FlowSystem.add_connection(state.factory, link_source_id, building_id, link_source_port, target_port)
+			if is_instance_valid(connection_renderer):
+				connection_renderer.mark_lines_dirty()
 		_set_mouse_mode(MouseMode.INSPECT)
 
 func _handle_demolish(building_id: int) -> void:
 	if building_id == 0:
 		return
 		
-	var building = network.buildings.get(building_id)
+	var building = state.factory.buildings.get(building_id)
 	if building:
-		# Refund
-		building_manager.refund_building(building.type)
+		BuildingSystem.demolish_building(state, building_id)
 		
 		# Remove from visual system
 		if visuals_map.has(building_id):
 			visuals_map[building_id].queue_free()
 			visuals_map.erase(building_id)
-			
-		# Remove from model
-		network.remove_building(building_id)
 		
 		# Deselect if needed
 		if selected_building_id == building_id:
@@ -419,7 +418,7 @@ func _on_simulation_tick(_ticks: int) -> void:
 func _update_ui() -> void:
 	# Calculate credits income rate
 	var credits_per_tick = 0.0
-	for b in network._buildings_list:
+	for b in state.factory.buildings_list:
 		if b.type == "seller" and not b.active_recipe.is_empty():
 			var dur = float(b.active_recipe.get("duration", 1.0))
 			var amt = b.active_recipe.get("outputs", {}).get("credits", 0.0)
@@ -427,28 +426,28 @@ func _update_ui() -> void:
 			
 	# Will refactor HUD soon, pass the managers for now
 	if hud.has_method("update_hud_new"):
-		hud.update_hud_new(resource_manager, building_manager, upgrades_manager, artifacts_manager, milestones_manager, credits_per_tick, current_mode as int, selected_build_type)
+		hud.update_hud_new(state, credits_per_tick, current_mode as int, selected_build_type)
 	else:
 		pass # Ignore old HUD method until refactored
 
 func _update_inspector() -> void:
-	var b_data = network.buildings.get(selected_building_id)
+	var b_data = state.factory.buildings.get(selected_building_id)
 	if inspector_panel.has_method("update_inspector_new"):
-		inspector_panel.update_inspector_new(b_data, building_manager)
+		inspector_panel.update_inspector_new(b_data, state)
 	else:
 		pass # Ignore old inspector panel method until refactored
 
 func _on_recipe_selected(idx: int) -> void:
-	var b_data = network.buildings.get(selected_building_id)
+	var b_data = state.factory.buildings.get(selected_building_id)
 	if b_data == null:
 		return
 	var possible_recipes = Recipes.DATA.get(b_data.type, [])
 	if idx >= 0 and idx < possible_recipes.size():
 		var new_recipe = possible_recipes[idx].duplicate(true)
 		b_data.set_recipe(new_recipe)
-		network.rebuild_caches()
+		state.factory.rebuild_caches()
 		_update_inspector()
-		SaveManager.save_game(network, resource_manager, building_manager, upgrades_manager, artifacts_manager, milestones_manager, template_manager)
+		request_save()
 
 # --- Input Controller Handlers ---
 
@@ -467,7 +466,7 @@ func _on_input_building_right_clicked(building_id: int, port_index: int = 0) -> 
 	visuals_map[link_source_id].is_selected = true
 	if is_instance_valid(input_controller):
 		input_controller.link_source_id = link_source_id
-		input_controller.link_source_port = link_source_port
+		input_controller.link_source_port = port_index
 
 func _on_input_empty_space_clicked(grid_pos: Vector2i) -> void:
 	if current_mode == MouseMode.BUILD:
@@ -476,7 +475,7 @@ func _on_input_empty_space_clicked(grid_pos: Vector2i) -> void:
 		_handle_inspect(0)
 
 func _on_input_building_move_completed() -> void:
-	SaveManager.save_game(network, resource_manager, building_manager, upgrades_manager, artifacts_manager, milestones_manager, template_manager)
+	request_save()
 
 func _on_input_link_mode_cancelled() -> void:
 	_set_mouse_mode(MouseMode.INSPECT)
@@ -487,13 +486,13 @@ func _on_input_selection_changed(ids: Array[int]) -> void:
 	elif ids.size() > 1:
 		selected_building_id = 0
 		var total_cost: Dictionary = {}
-		var sim_counts: Dictionary = building_manager.building_counts.duplicate()
+		var sim_counts: Dictionary = BuildingSystem.get_building_counts(state)
 		for b_id in ids:
-			var b_data = network.buildings.get(b_id)
+			var b_data = state.factory.buildings.get(b_id)
 			if b_data:
 				var type = b_data.type
 				var count = sim_counts.get(type, 0)
-				var config: BuildingCostData = building_manager.cost_configs.get(type)
+				var config: BuildingCostData = BuildingSystem.cost_configs.get(type)
 				if config != null:
 					var cost = {}
 					if count == 0:
@@ -504,26 +503,25 @@ func _on_input_selection_changed(ids: Array[int]) -> void:
 					for res in cost:
 						total_cost[res] = total_cost.get(res, 0.0) + cost[res]
 				sim_counts[type] = count + 1
-		var can_afford = resource_manager.can_afford(total_cost) if not building_manager.free_buildings_mode else true
+		var can_afford = ResourceSystem.can_afford(state, total_cost) if not state.free_buildings_mode else true
 		inspector_panel.update_multi_inspector(ids.size(), total_cost, can_afford)
 	else:
 		_handle_inspect(0)
 
 func _on_input_demolish_requested(ids: Array[int]) -> void:
 	for b_id in ids:
-		var building = network.buildings.get(b_id)
+		var building = state.factory.buildings.get(b_id)
 		if building:
-			building_manager.refund_building(building.type)
+			BuildingSystem.demolish_building(state, b_id)
 			if visuals_map.has(b_id):
 				visuals_map[b_id].queue_free()
 				visuals_map.erase(b_id)
-			network.remove_building(b_id)
 	selected_building_id = 0
 	if is_instance_valid(input_controller):
 		input_controller.set_selected_buildings([])
 	inspector_panel.visible = false
 	_update_ui()
-	SaveManager.save_game(network, resource_manager, building_manager, upgrades_manager, artifacts_manager, milestones_manager, template_manager)
+	request_save()
 
 func _on_input_copy_requested(ids: Array[int]) -> void:
 	if ids.is_empty():
@@ -532,9 +530,9 @@ func _on_input_copy_requested(ids: Array[int]) -> void:
 	# Filter out limited buildings (max_count >= 0)
 	var valid_ids: Array[int] = []
 	for b_id in ids:
-		var b_data = network.buildings.get(b_id)
+		var b_data = state.factory.buildings.get(b_id)
 		if b_data:
-			var config: BuildingCostData = building_manager.cost_configs.get(b_data.type)
+			var config: BuildingCostData = BuildingSystem.cost_configs.get(b_data.type)
 			if config != null and config.max_count >= 0:
 				continue # Skip limited buildings
 			valid_ids.append(b_id)
@@ -545,7 +543,7 @@ func _on_input_copy_requested(ids: Array[int]) -> void:
 	var min_cell = Vector2i(999999, 999999)
 	var max_cell = Vector2i(-999999, -999999)
 	for b_id in valid_ids:
-		var b_data = network.buildings[b_id]
+		var b_data = state.factory.buildings[b_id]
 		min_cell.x = mini(min_cell.x, b_data.grid_position.x)
 		min_cell.y = mini(min_cell.y, b_data.grid_position.y)
 		var end_cell = b_data.grid_position + b_data.size_in_cells
@@ -558,7 +556,7 @@ func _on_input_copy_requested(ids: Array[int]) -> void:
 	for i in range(valid_ids.size()):
 		var b_id = valid_ids[i]
 		id_to_index[b_id] = i
-		var b_data = network.buildings[b_id]
+		var b_data = state.factory.buildings[b_id]
 		var rel_pos = b_data.grid_position - min_cell
 		copied_buildings.append({
 			"relative_pos": rel_pos,
@@ -568,7 +566,7 @@ func _on_input_copy_requested(ids: Array[int]) -> void:
 		})
 		
 	var inner_connections: Array = []
-	for conn in network.connections:
+	for conn in state.factory.connections:
 		if id_to_index.has(conn["from_id"]) and id_to_index.has(conn["to_id"]):
 			inner_connections.append({
 				"from_index": id_to_index[conn["from_id"]],
@@ -579,11 +577,11 @@ func _on_input_copy_requested(ids: Array[int]) -> void:
 			
 	# Calculate total cost
 	var total_cost: Dictionary = {}
-	var sim_counts: Dictionary = building_manager.building_counts.duplicate()
+	var sim_counts: Dictionary = BuildingSystem.get_building_counts(state)
 	for b_info in copied_buildings:
 		var type = b_info["type"]
 		var count = sim_counts.get(type, 0)
-		var config: BuildingCostData = building_manager.cost_configs.get(type)
+		var config: BuildingCostData = BuildingSystem.cost_configs.get(type)
 		if config != null:
 			var cost = {}
 			if count == 0:
@@ -595,9 +593,9 @@ func _on_input_copy_requested(ids: Array[int]) -> void:
 				total_cost[res] = total_cost.get(res, 0.0) + cost[res]
 		sim_counts[type] = count + 1
 		
-	var can_afford = resource_manager.can_afford(total_cost) if not building_manager.free_buildings_mode else true
+	var can_afford = ResourceSystem.can_afford(state, total_cost) if not state.free_buildings_mode else true
 	
-	if not can_afford and not building_manager.free_buildings_mode:
+	if not can_afford and not state.free_buildings_mode:
 		inspector_panel.update_multi_inspector(copied_buildings.size(), total_cost, false)
 		return
 		
@@ -622,10 +620,10 @@ func _on_input_copy_placement_confirmed(target_origin_grid: Vector2i) -> void:
 		var rel_pos: Vector2i = b["relative_pos"]
 		var b_size: Vector2i = b["size"]
 		var cell_pos = target_origin_grid + rel_pos
-		if not network.is_area_free(cell_pos, b_size):
+		if not GridSystem.is_area_free(state.factory, cell_pos, b_size):
 			return # Cannot place
 			
-	var can_afford = resource_manager.can_afford(total_cost) if not building_manager.free_buildings_mode else true
+	var can_afford = ResourceSystem.can_afford(state, total_cost) if not state.free_buildings_mode else true
 	if not can_afford:
 		return
 		
@@ -634,12 +632,15 @@ func _on_input_copy_placement_confirmed(target_origin_grid: Vector2i) -> void:
 		var type = b["type"]
 		var cell_pos = target_origin_grid + b["relative_pos"]
 		var recipe = b["recipe"].duplicate(true)
-		if building_manager.buy_building(type):
-			var b_data = network.add_building(type, cell_pos, recipe)
+		if BuildingSystem.buy_building(state, type):
+			var b_data = BuildingSystem.place_building(state, type, cell_pos)
+			if b_data and not recipe.is_empty():
+				b_data.set_recipe(recipe)
 			if type == "portal":
-				network.sync_portal_inputs(milestones_manager)
-			_create_building_visual(b_data)
-			new_building_ids.append(b_data.id)
+				FlowSystem.sync_portal_inputs(state)
+			if b_data:
+				_create_building_visual(b_data)
+				new_building_ids.append(b_data.id)
 			
 	for conn in copy_data.get("connections", []):
 		var from_idx = conn["from_index"]
@@ -647,10 +648,10 @@ func _on_input_copy_placement_confirmed(target_origin_grid: Vector2i) -> void:
 		if from_idx < new_building_ids.size() and to_idx < new_building_ids.size():
 			var from_id = new_building_ids[from_idx]
 			var to_id = new_building_ids[to_idx]
-			network.add_connection(from_id, to_id, conn["from_port"], conn["to_port"])
+			FlowSystem.add_connection(state.factory, from_id, to_id, conn["from_port"], conn["to_port"])
 			
 	_update_ui()
-	SaveManager.save_game(network, resource_manager, building_manager, upgrades_manager, artifacts_manager, milestones_manager, template_manager)
+	request_save()
 	
 	if not Input.is_key_pressed(KEY_SHIFT):
 		_set_mouse_mode(MouseMode.INSPECT)
@@ -661,39 +662,29 @@ func _on_input_copy_placement_cancelled() -> void:
 # --- Template Management ---
 
 func switch_template(target_id: String) -> void:
-	if template_manager == null:
-		return
-	var current_snap = TemplateManager.capture_snapshot(network, resource_manager, building_manager, upgrades_manager, artifacts_manager, milestones_manager)
-	if template_manager.switch_template(target_id, current_snap, network, resource_manager, building_manager, upgrades_manager, artifacts_manager, milestones_manager):
-		network.sync_portal_inputs(milestones_manager)
+	if TemplateSystem.switch_template(state, target_id):
+		FlowSystem.sync_portal_inputs(state)
 		_rebuild_visuals()
-		SaveManager.save_game(network, resource_manager, building_manager, upgrades_manager, artifacts_manager, milestones_manager, template_manager)
+		request_save()
 		_update_ui()
 
-func create_template(template_name: String) -> void:
-	if template_manager == null:
-		return
-	var current_snap = TemplateManager.capture_snapshot(network, resource_manager, building_manager, upgrades_manager, artifacts_manager, milestones_manager)
-	template_manager.create_template(template_name, current_snap)
-	SaveManager.save_game(network, resource_manager, building_manager, upgrades_manager, artifacts_manager, milestones_manager, template_manager)
+func create_template(name: String = "") -> void:
+	var new_id = TemplateSystem.create_template(state, name)
+	request_save()
 	_update_ui()
 
 func reset_active_template() -> void:
-	if template_manager == null:
-		return
-	template_manager.reset_active_template(network, resource_manager, building_manager, upgrades_manager, artifacts_manager, milestones_manager)
-	network.sync_portal_inputs(milestones_manager)
+	TemplateSystem.reset_active_template(state)
+	FlowSystem.sync_portal_inputs(state)
 	_rebuild_visuals()
-	SaveManager.save_game(network, resource_manager, building_manager, upgrades_manager, artifacts_manager, milestones_manager, template_manager)
+	request_save()
 	_update_ui()
 
 func delete_active_template() -> void:
-	if template_manager == null:
-		return
-	template_manager.delete_active_template(network, resource_manager, building_manager, upgrades_manager, artifacts_manager, milestones_manager)
-	network.sync_portal_inputs(milestones_manager)
+	TemplateSystem.delete_active_template(state)
+	FlowSystem.sync_portal_inputs(state)
 	_rebuild_visuals()
-	SaveManager.save_game(network, resource_manager, building_manager, upgrades_manager, artifacts_manager, milestones_manager, template_manager)
+	request_save()
 	_update_ui()
 
 func _rebuild_visuals() -> void:
@@ -706,13 +697,16 @@ func _rebuild_visuals() -> void:
 		inspector_panel.update_inspector_new(null, null)
 		inspector_panel.visible = false
 		
-	for b_id in network.buildings:
-		var b_data = network.buildings[b_id]
+	for b_id in state.factory.buildings:
+		var b_data = state.factory.buildings[b_id]
 		_create_building_visual(b_data)
 		
-	connection_renderer.setup(network, visuals_map)
+	if is_instance_valid(building_renderer):
+		building_renderer.mark_culling_dirty()
+		
+	connection_renderer.setup(state, visuals_map)
 	if is_instance_valid(input_controller):
-		input_controller.setup(camera, network, visuals_map, build_preview, building_renderer, connection_renderer)
+		input_controller.setup(camera, state, visuals_map, build_preview, building_renderer, connection_renderer)
 
 # --- Offline Catch-up Dialog ---
 
@@ -752,7 +746,7 @@ func _adjust_popup() -> void:
 
 func _on_reset_pressed() -> void:
 	# Clear save game
-	SaveManager.delete_save()
+	SaveSystem.delete_save()
 	
 	# Clear visual instances
 	for visual in visuals_map.values():
@@ -765,22 +759,18 @@ func _on_reset_pressed() -> void:
 		inspector_panel.visible = false
 	
 	# Re-init core
-	network = FactoryNetwork.new()
-	resource_manager = ResourceManager.new()
-	modifier_manager = ModifierManager.new()
-	milestones_manager = MilestonesManager.new()
-	artifacts_manager = ArtifactsManager.new(modifier_manager)
-	building_manager = BuildingManager.new(resource_manager, milestones_manager)
-	upgrades_manager = UpgradesManager.new(resource_manager, modifier_manager)
-	template_manager = TemplateManager.new()
-	ticker = SimulationTicker.new(network, resource_manager, modifier_manager, milestones_manager, artifacts_manager)
+	# Re-init core
+	state = GameState.new()
+	ResourceSystem.add_resource(state, "credits", 85.0)
+	
+	ticker = SimulationTicker.new(state)
 	ticker.tick_completed.connect(_on_simulation_tick)
 	
-	connection_renderer.setup(network, visuals_map)
+	connection_renderer.setup(state, visuals_map)
 	if is_instance_valid(input_controller):
-		input_controller.setup(camera, network, visuals_map, build_preview, building_renderer, connection_renderer)
+		input_controller.setup(camera, state, visuals_map, build_preview, building_renderer, connection_renderer)
 	if gd_panel != null:
-		gd_panel.setup(milestones_manager, upgrades_manager, self, building_manager, template_manager)
+		gd_panel.setup(state, self)
 		
 	_set_mouse_mode(MouseMode.INSPECT)
 	_update_ui()

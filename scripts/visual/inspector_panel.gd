@@ -17,7 +17,7 @@ func _ready() -> void:
 var _inspected_building_id: int = -1
 var _inspected_recipe_id: String = ""
 
-func update_inspector_new(b_data: BuildingData, build_mgr: BuildingManager) -> void:
+func update_inspector_new(b_data: BuildingData, state: GameState) -> void:
 	inspector_details.remove_theme_color_override("font_color")
 	if b_data == null:
 		visible = false
@@ -32,8 +32,8 @@ func update_inspector_new(b_data: BuildingData, build_mgr: BuildingManager) -> v
 	text += "Grid Position: %s\n" % str(b_data.grid_position)
 	text += "-------------------------\n"
 	
-	if b_data.type == "portal" and build_mgr != null and build_mgr.milestones_manager != null:
-		var m_info = build_mgr.milestones_manager.get_current_milestone()
+	if b_data.type == "portal" and state != null:
+		var m_info = MilestoneSystem.get_current_milestone(state)
 		if m_info.get("completed_all", false):
 			text += "Milestone Status:\n  All Tiers Completed! 🏆\n"
 		else:

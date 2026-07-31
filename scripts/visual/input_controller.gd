@@ -17,7 +17,7 @@ signal copy_placement_cancelled
 # Config references
 var cell_size: int = 64
 var camera: GameCamera
-var network: FactoryNetwork
+var state: GameState
 var visuals_map: Dictionary = {}
 var build_preview: PanelContainer
 var building_renderer: BuildingRenderer
@@ -56,9 +56,9 @@ var _last_stream_build_grid: Vector2i = Vector2i(-99999, -99999)
 # Copy preview state (mirrored from MainGame)
 var copy_preview_info: Dictionary = {} # { "buildings": Array, "origin_grid": Vector2i, "is_valid": bool }
 
-func setup(p_camera: GameCamera, p_network: FactoryNetwork, p_visuals_map: Dictionary, p_preview: PanelContainer, p_building_renderer: BuildingRenderer = null, p_connection_renderer: ConnectionRenderer = null) -> void:
+func setup(p_camera: GameCamera, p_state: GameState, p_visuals_map: Dictionary, p_preview: PanelContainer, p_building_renderer: BuildingRenderer = null, p_connection_renderer: ConnectionRenderer = null) -> void:
 	camera = p_camera
-	network = p_network
+	state = p_state
 	visuals_map = p_visuals_map
 	build_preview = p_preview
 	building_renderer = p_building_renderer
@@ -96,7 +96,7 @@ func set_selected_buildings(ids: Array[int]) -> void:
 var _last_hovered_id: int = 0
 
 func _process(_delta: float) -> void:
-	if network == null:
+	if state == null:
 		return
 		
 	# Process building preview positioning in BUILD mode (centered under mouse cursor)
@@ -169,7 +169,7 @@ func _draw() -> void:
 			style.draw(get_canvas_item(), rect)
 
 func _unhandled_input(event: InputEvent) -> void:
-	if network == null:
+	if state == null:
 		return
 		
 	# Keyboard shortcuts (Delete = demolish, Ctrl+C = copy)
@@ -188,8 +188,8 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
 		var building_id = _get_building_id_under_mouse()
 		var grid_pos = _get_grid_position_under_mouse()
-		if building_id != 0 and network.buildings.has(building_id):
-			grid_pos = network.buildings[building_id].grid_position
+		if building_id != 0 and state.factory.buildings.has(building_id):
+			grid_pos = state.factory.buildings[building_id].grid_position
 		
 		if event.button_index == MOUSE_BUTTON_LEFT:
 			if event.pressed:
@@ -223,8 +223,8 @@ func _unhandled_input(event: InputEvent) -> void:
 						_is_dragging_group = true
 						_drag_group_starts.clear()
 						for id in selected_building_ids:
-							if network.buildings.has(id):
-								_drag_group_starts[id] = network.buildings[id].grid_position
+							if state.factory.buildings.has(id):
+								_drag_group_starts[id] = state.factory.buildings[id].grid_position
 								var vis = visuals_map.get(id)
 								if is_instance_valid(vis):
 									vis.is_dragged = true
@@ -294,9 +294,9 @@ func _unhandled_input(event: InputEvent) -> void:
 						if is_valid:
 							for id in selected_building_ids:
 								var new_pos = _drag_group_starts[id] + delta_grid
-								network.move_building(id, new_pos)
+								GridSystem.move_building(state.factory, id, new_pos)
 								var visual = visuals_map.get(id)
-								var b_data = network.buildings.get(id)
+								var b_data = state.factory.buildings.get(id)
 								if is_instance_valid(visual) and b_data:
 									visual.is_invalid_drag = false
 									var size_px = Vector2(b_data.size_in_cells * cell_size)
@@ -306,7 +306,7 @@ func _unhandled_input(event: InputEvent) -> void:
 							# Restore visual positions on invalid placement
 							for id in selected_building_ids:
 								var visual = visuals_map.get(id)
-								var b_data = network.buildings.get(id)
+								var b_data = state.factory.buildings.get(id)
 								if is_instance_valid(visual) and b_data:
 									visual.is_invalid_drag = false
 									var size_px = Vector2(b_data.size_in_cells * cell_size)
@@ -328,10 +328,11 @@ func _unhandled_input(event: InputEvent) -> void:
 					var visual = visuals_map.get(_dragged_building_id)
 					if is_instance_valid(visual):
 						visual.is_dragged = false
-					var b_data = network.buildings.get(_dragged_building_id)
-					if _has_dragged:
+					var b_data = state.factory.buildings.get(_dragged_building_id)
+					if _has_dragged and b_data:
+						# Ask model to move it
 						var target_top_left = _get_dragged_target_top_left()
-						var moved = network.move_building(_dragged_building_id, target_top_left)
+						var moved = GridSystem.move_building(state.factory, _dragged_building_id, target_top_left)
 						if is_instance_valid(visual) and b_data:
 							visual.is_invalid_drag = false
 							var size_px = Vector2(b_data.size_in_cells * cell_size)
@@ -401,7 +402,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			for id in selected_building_ids:
 				var orig_grid = _drag_group_starts.get(id, Vector2i.ZERO)
 				var target_top_left = orig_grid + delta_grid
-				var b_data = network.buildings.get(id)
+				var b_data = state.factory.buildings.get(id)
 				var visual = visuals_map.get(id)
 				if b_data and is_instance_valid(visual):
 					var size_px = Vector2(b_data.size_in_cells * cell_size)
@@ -411,12 +412,12 @@ func _unhandled_input(event: InputEvent) -> void:
 
 		elif _is_dragging_building:
 			var target_top_left = _get_dragged_target_top_left()
-			var b_data = network.buildings.get(_dragged_building_id)
+			var b_data = state.factory.buildings.get(_dragged_building_id)
 			var visual = visuals_map.get(_dragged_building_id)
 			if b_data and is_instance_valid(visual):
 				var size_px = Vector2(b_data.size_in_cells * cell_size)
 				visual.position = Vector2(target_top_left) * cell_size + size_px / 2.0
-				var is_free = network.is_area_free(target_top_left, b_data.size_in_cells, _dragged_building_id)
+				var is_free = GridSystem.is_area_free(state.factory, target_top_left, b_data.size_in_cells, _dragged_building_id)
 				visual.is_invalid_drag = not is_free
 			_request_renderers_redraw()
 
@@ -487,14 +488,14 @@ func _check_group_drag_validity(delta_grid: Vector2i) -> bool:
 	for id in selected_building_ids:
 		var orig_pos = _drag_group_starts.get(id, Vector2i.ZERO)
 		var target_pos = orig_pos + delta_grid
-		var b_data = network.buildings.get(id)
+		var b_data = state.factory.buildings.get(id)
 		if b_data == null:
 			return false
 		for x in range(b_data.size_in_cells.x):
 			for y in range(b_data.size_in_cells.y):
 				var cell = target_pos + Vector2i(x, y)
-				if network.grid.has(cell):
-					var occ_id = network.grid[cell]
+				if state.factory.grid.has(cell):
+					var occ_id = state.factory.grid[cell]
 					if not (occ_id in selected_building_ids):
 						return false
 	return true
@@ -505,8 +506,8 @@ func _get_building_id_under_mouse() -> int:
 		floori(m_pos.x / cell_size),
 		floori(m_pos.y / cell_size)
 	)
-	if network != null and network.grid.has(grid_pos):
-		return network.grid[grid_pos]
+	if state != null and state.factory.grid.has(grid_pos):
+		return state.factory.grid[grid_pos]
 	return 0
 
 func _get_grid_position_under_mouse() -> Vector2i:
