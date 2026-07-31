@@ -16,12 +16,10 @@ func _init(p_state: GameState) -> void:
 
 ## Internal helper to run a single logical tick using the Systems
 func _run_single_tick(delta: float) -> void:
-	var miner_speed_mult = ModifierSystem.get_multiplier(state, "miner_speed")
-	var factory_speed_mult = ModifierSystem.get_multiplier(state, "factory_speed")
 	var sell_mult = ModifierSystem.get_multiplier(state, "sell_multiplier")
 
 	# 1. Process all recipes
-	ProductionSystem.tick(state.factory, delta, miner_speed_mult, factory_speed_mult)
+	ProductionSystem.tick(state, delta)
 	FlowSystem.tick(state, sell_mult)
 
 ## Processes real-time game tick accumulation. Call this inside a Node's _process loop.

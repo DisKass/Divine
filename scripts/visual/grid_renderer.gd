@@ -13,6 +13,7 @@ extends Node2D
 @export var axis_line_width: float = 2.0
 
 var _last_transform: Transform2D
+var state: GameState
 
 func _process(_delta: float) -> void:
 	# Force redraw only if the camera view matrix changes
@@ -59,3 +60,17 @@ func _draw() -> void:
 		draw_line(Vector2(0, start_y), Vector2(0, end_y), axis_color, axis_line_width)
 	if start_y <= 0 and end_y >= 0:
 		draw_line(Vector2(start_x, 0), Vector2(end_x, 0), axis_color, axis_line_width)
+		
+	# Draw Altar AoE
+	if state != null and state.factory != null:
+		for altar in state.factory.altars:
+			if not altar.held_artifact.is_empty():
+				var item = ItemData.from_dict(altar.held_artifact)
+				var aoe = item.aoe_size
+				var rect_grid_pos = altar.grid_position - Vector2i(aoe, aoe)
+				var rect_grid_size = altar.size_in_cells + Vector2i(aoe * 2, aoe * 2)
+				var rect_px = Rect2(Vector2(rect_grid_pos) * cell_size, Vector2(rect_grid_size) * cell_size)
+				
+				# Semi-transparent fill and bold outline
+				draw_rect(rect_px, Color(0.8, 0.4, 1.0, 0.1), true)
+				draw_rect(rect_px, Color(0.8, 0.4, 1.0, 0.6), false, 2.0)

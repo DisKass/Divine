@@ -253,8 +253,29 @@ func _process(delta: float) -> void:
 		if is_instance_valid(static_ui):
 			static_ui.queue_redraw()
 			
-	if dynamic_needs_redraw and is_instance_valid(dynamic_ui):
-		dynamic_ui.queue_redraw()
+	if dynamic_needs_redraw:
+		if is_instance_valid(dynamic_ui):
+			dynamic_ui.queue_redraw()
+		queue_redraw()
+
+func _draw() -> void:
+	# AoE Highlights for Altars (always draw for non-empty altars) UNDER buildings (z-index 0)
+	if _cached_visible_visuals.is_empty():
+		return
+		
+	for vis in _cached_visible_visuals:
+		if vis.data and vis.data.type == "artifact_altar" and not vis.data.held_artifact.is_empty():
+			var item = ItemData.from_dict(vis.data.held_artifact)
+			var aoe = item.aoe_size
+			if aoe > 0:
+				var size_px = Vector2(vis.data.size_in_cells * vis.cell_size)
+				var top_left = vis.global_position - size_px / 2.0
+				var aoe_margin = float(aoe * vis.cell_size)
+				var aoe_rect = Rect2(top_left.x - aoe_margin, top_left.y - aoe_margin, size_px.x + aoe_margin * 2.0, size_px.y + aoe_margin * 2.0)
+				
+				# This is drawn beneath the multimesh panels
+				draw_rect(aoe_rect, Color(0.9, 0.8, 0.2, 0.15), true)
+				draw_rect(aoe_rect, Color(0.9, 0.8, 0.2, 0.4), false, 2.0)
 
 func _perform_culling_and_update_multimeshes() -> void:
 	var view_rect = camera.get_visible_world_rect(128.0) if is_instance_valid(camera) else Rect2(-99999, -99999, 199998, 199998)
@@ -449,6 +470,35 @@ func _draw_building_text(canvas: CanvasItem, std_visuals: Array[BuildingVisual],
 	var in_fill_color = Color(0.85, 0.75, 0.75)
 	for idx in range(std_count):
 		var vis = std_visuals[idx]
+		
+		# Custom rendering for artifact altar
+		if vis.data.type == "artifact_altar" and not vis.data.held_artifact.is_empty():
+			var item = ItemData.from_dict(vis.data.held_artifact)
+			var tl = top_lefts[idx]
+			var sz = sizes_px[idx]
+			
+			# Draw the info frame
+			var frame_margin = 12.0
+			var frame_rect = Rect2(tl.x + frame_margin, tl.y + 24.0, sz.x - frame_margin * 2.0, sz.y - 24.0 - frame_margin)
+			canvas.draw_rect(frame_rect, Color(0.05, 0.07, 0.1, 0.6), true) # Dark backdrop
+			canvas.draw_rect(frame_rect, Color(0.9, 0.8, 0.2, 0.4), false, 1.0) # Golden border
+			
+			var text_y = frame_rect.position.y + 16.0
+			var base_cfg = ArtifactSystem.artifact_configs.get(item.base_id)
+			var a_name = base_cfg.name if base_cfg else item.base_id
+			
+			canvas.draw_string(font, Vector2(tl.x, text_y), a_name, HORIZONTAL_ALIGNMENT_CENTER, sz.x, 11, Color(0.9, 0.9, 0.4))
+			text_y += 16.0
+			canvas.draw_string(font, Vector2(tl.x, text_y), "AoE: %d" % item.aoe_size, HORIZONTAL_ALIGNMENT_CENTER, sz.x, 10, Color(1.0, 0.9, 0.7))
+			text_y += 18.0
+			
+			var stats = item.get_all_modifier_names()
+			for mod in stats:
+				var val = item.get_modifier_total(mod)
+				canvas.draw_string(font, Vector2(tl.x, text_y), "%s: +%.2f" % [mod.capitalize(), val], HORIZONTAL_ALIGNMENT_CENTER, sz.x, 10, Color(1.0, 0.9, 0.5))
+				text_y += 14.0
+			continue
+
 		var in_lines = vis._cached_in_text_lines
 		var in_count = in_lines.size()
 		if in_count > 0:
@@ -473,6 +523,11 @@ func _draw_building_text(canvas: CanvasItem, std_visuals: Array[BuildingVisual],
 	var out_fill_color = Color(0.75, 0.85, 0.75)
 	for idx in range(std_count):
 		var vis = std_visuals[idx]
+		
+		# Custom rendering for artifact altar skips outputs
+		if vis.data.type == "artifact_altar" and not vis.data.held_artifact.is_empty():
+			continue
+			
 		var out_lines = vis._cached_out_text_lines
 		var out_count = out_lines.size()
 		if out_count > 0:
@@ -563,7 +618,7 @@ func _draw_dynamic_layer(canvas: CanvasItem) -> void:
 					var fill_ratio = clampf(data.production_progress / duration, 0.0, 1.0)
 					if fill_ratio > 0.0:
 						canvas.draw_rect(Rect2(top_left.x + bar_margin_x, bar_y, bar_width * fill_ratio, 5.0), vis.accent_color, true)
-						
+
 	# Selected Building Text (Dynamic)
 	var font = _fallback_font
 	if font == null: font = ThemeDB.fallback_font

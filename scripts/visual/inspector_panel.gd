@@ -9,17 +9,27 @@ signal recipe_selected(recipe_idx: int)
 @onready var recipe_container: HBoxContainer = $VBoxContainer/RecipeSelectorContainer
 @onready var recipe_button: OptionButton = $VBoxContainer/RecipeSelectorContainer/RecipeOptionButton
 
+var unequip_btn: Button
+
 func _ready() -> void:
 	visible = false
 	recipe_container.visible = false
 	recipe_button.item_selected.connect(_on_recipe_selected)
+	
+	unequip_btn = Button.new()
+	unequip_btn.text = "Unequip Artifact"
+	unequip_btn.visible = false
+	$VBoxContainer.add_child(unequip_btn)
+	unequip_btn.pressed.connect(_on_unequip_pressed)
 
 var _inspected_building_id: int = -1
 var _inspected_recipe_id: String = ""
 
 func update_inspector_new(b_data: BuildingData, state: GameState) -> void:
 	inspector_details.remove_theme_color_override("font_color")
+	var show_unequip = false
 	if b_data == null:
+		unequip_btn.visible = false
 		visible = false
 		_inspected_building_id = -1
 		_inspected_recipe_id = ""
@@ -46,6 +56,19 @@ func update_inspector_new(b_data: BuildingData, state: GameState) -> void:
 				var cur_val = int(round(float(prog.get(res, 0.0))))
 				var target_val = int(round(float(reqs[res])))
 				text += "   • %s: %d / %d\n" % [res.replace("_", " ").capitalize(), cur_val, target_val]
+	elif b_data.type == "artifact_altar":
+		if b_data.held_artifact.is_empty():
+			text += "Artifact: None\n"
+		else:
+			var item = ItemData.from_dict(b_data.held_artifact)
+			var base_cfg = ArtifactSystem.artifact_configs.get(item.base_id)
+			var a_name = base_cfg.name if base_cfg else item.base_id
+			text += "Artifact: %s\n" % a_name
+			text += "AoE Size: %d\n" % item.aoe_size
+			text += "--- Stats ---\n"
+			for mod in item.get_all_modifier_names():
+				text += "  +%s: %.2f\n" % [mod.capitalize(), item.get_modifier_total(mod)]
+			show_unequip = true
 	else:
 		if not b_data.active_recipe.is_empty():
 			text += "Recipe: %s\n" % b_data.active_recipe.get("name", b_data.active_recipe.get("id", "Unknown"))
@@ -65,6 +88,7 @@ func update_inspector_new(b_data: BuildingData, state: GameState) -> void:
 				text += "  - %s: %d / %d\n" % [res, int(round(b_data.outputs[res])), int(round(b_data.output_limits.get(res, 20.0)))]
 		
 	inspector_details.text = text
+	unequip_btn.visible = show_unequip
 
 	var active_recipe_id = b_data.active_recipe.get("id", "")
 	var possible_recipes = Recipes.DATA.get(b_data.type, [])
@@ -119,6 +143,12 @@ func update_multi_inspector(selected_count: int, total_cost: Dictionary = {}, ca
 		inspector_details.remove_theme_color_override("font_color")
 
 	inspector_details.text = text
+	unequip_btn.visible = false
 
 func _on_recipe_selected(idx: int) -> void:
 	recipe_selected.emit(idx)
+
+signal unequip_requested(building_id: int)
+func _on_unequip_pressed() -> void:
+	if _inspected_building_id != -1:
+		unequip_requested.emit(_inspected_building_id)

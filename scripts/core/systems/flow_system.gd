@@ -21,6 +21,13 @@ static func add_connection(state: FactoryState, from_id: int, to_id: int, from_p
 			if to_building.input_limits.has(output_resource):
 				has_matching_resource = true
 				break
+	elif to_building.is_vault_gateway:
+		for output_resource in from_building.outputs:
+			if ArtifactSystem.artifact_configs.has(output_resource):
+				to_building.inputs[output_resource] = to_building.inputs.get(output_resource, 0.0)
+				to_building.input_limits[output_resource] = 1.0
+				has_matching_resource = true
+				break
 	elif to_building.is_splitter or from_building.is_splitter:
 		has_matching_resource = true
 		for output_resource in from_building.outputs:
@@ -143,6 +150,11 @@ static func tick(state: GameState, sell_mult: float = 1.0) -> void:
 						from_building.last_outgoing_connection_index = (connection_index + 1) % num_connections
 						connection_data["last_res_index"] = (resource_index + 1) % num_resources
 						break
+				elif to_building.is_vault_gateway:
+					if _try_transfer_to_vault(state, from_building, from_port, to_building, to_port, resource_name, connection_data):
+						from_building.last_outgoing_connection_index = (connection_index + 1) % num_connections
+						connection_data["last_res_index"] = (resource_index + 1) % num_resources
+						break
 				else:
 					var target_current = to_building.inputs.get(resource_name, 0.0)
 					var target_limit = to_building.input_limits.get(resource_name, 0.0 if to_building.is_portal else 20.0)
@@ -178,13 +190,20 @@ static func tick(state: GameState, sell_mult: float = 1.0) -> void:
 				if amount > 0.0:
 					MilestoneSystem.submit_portal_resource(state, resource_name, amount)
 
-	for building_instance in state.factory.buildings_list:
-		for resource_name in building_instance.outputs.keys():
-			if not resource_name.begins_with("_") and ArtifactSystem.artifact_configs.has(resource_name):
-				var amount = int(building_instance.outputs[resource_name])
-				if amount > 0:
-					ArtifactSystem.add_artifact_to_inventory(state, resource_name, amount)
-					building_instance.outputs[resource_name] = 0.0
+
+
+static func _try_transfer_to_vault(state: GameState, from_building: BuildingData, from_port: int, vault: BuildingData, to_port: int, resource_name: String, connection_data: Dictionary) -> bool:
+	ArtifactSystem.ensure_configs_loaded()
+	if not ArtifactSystem.artifact_configs.has(resource_name):
+		return false
+	
+	if ArtifactSystem.add_artifact_base_to_inventory(state, resource_name):
+		from_building.outputs[resource_name] -= 1.0
+		from_building.ui_version += 1
+		connection_data["is_active"] = true
+		state.factory.resource_transferred.emit(from_building.id, from_port, vault.id, to_port, resource_name, 1.0, 1.0)
+		return true
+	return false
 
 static func _try_transfer_through_splitter(state: GameState, from_building: BuildingData, from_port: int, splitter_building: BuildingData, to_port: int, resource_name: String, connection_data: Dictionary) -> bool:
 	if state.factory.temp_visited_splitters.has(splitter_building.id):
@@ -209,6 +228,12 @@ static func _try_transfer_through_splitter(state: GameState, from_building: Buil
 
 		if target_building.is_splitter:
 			if _try_transfer_through_splitter(state, from_building, from_port, target_building, target_to_port, resource_name, connection_data):
+				splitter_building.last_outgoing_connection_index = (connection_index + 1) % num_connections
+				state.factory.resource_transferred.emit(splitter_building.id, splitter_from_port, target_building.id, target_to_port, resource_name, 1.0, 1.0)
+				target_connection_data["is_active"] = true
+				return true
+		elif target_building.is_vault_gateway:
+			if _try_transfer_to_vault(state, from_building, from_port, target_building, target_to_port, resource_name, connection_data):
 				splitter_building.last_outgoing_connection_index = (connection_index + 1) % num_connections
 				state.factory.resource_transferred.emit(splitter_building.id, splitter_from_port, target_building.id, target_to_port, resource_name, 1.0, 1.0)
 				target_connection_data["is_active"] = true

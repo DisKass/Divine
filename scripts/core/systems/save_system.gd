@@ -68,7 +68,6 @@ static func load_game(state: GameState) -> bool:
 	if data.has("game_state"):
 		state.load_from_dict(data["game_state"])
 		UpgradeSystem.rebuild_modifiers(state)
-		ArtifactSystem._update_modifiers(state)
 		return true
 
 	# Legacy fallback (v3)
@@ -118,7 +117,6 @@ static func load_game(state: GameState) -> bool:
 		state.active_template_id = tpl_dict["active_template_id"]
 
 	UpgradeSystem.rebuild_modifiers(state)
-	ArtifactSystem._update_modifiers(state)
 	return true
 
 ## Deletes the current save game. Useful for testing or resetting progress.

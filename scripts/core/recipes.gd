@@ -9,8 +9,9 @@ extends RefCounted
 ## 4. assembler: 2 solid in, 1 out
 ## 5. extractor: 1 solid in, 1 liquid/aetherial out
 ## 6. infuser: 2 in (1 solid + 1 liquid/aetherial), 1 out
-## 7. portal & seller: unique buildings (variable in, 0 out)
+## 7. portal & seller & vault_gateway: unique buildings (variable in, 0 out)
 ## 8. splitter_2 & splitter_3: logic buildings (1 in, 2 or 3 outputs)
+## 9. shell_forge: crafts artifact bases
 
 const DATA: Dictionary = {
 	"miner": [
@@ -142,6 +143,26 @@ const DATA: Dictionary = {
 		}
 	],
 
+	"shell_forge": [
+		{
+			"id": "runesteel_amulet",
+			"name": "Forge Runesteel Amulet",
+			"inputs": { "runesteel_ingot": 2.0, "mana_essence": 1.0 },
+			"outputs": { "runesteel_amulet": 1.0 },
+			"duration": 5.0
+		}
+	],
+
+	"vault_gateway": [
+		{
+			"id": "vault_deposit",
+			"name": "Deposit to Vault",
+			"inputs": {},
+			"outputs": {},
+			"duration": 1.0
+		}
+	],
+
 	"splitter_2": [
 		{
 			"id": "split_2",
@@ -182,8 +203,5 @@ const DATA: Dictionary = {
 	"alchemy_lab": [
 		{ "id": "mana_essence", "name": "Craft Mana Essence", "inputs": { "crystal_dust": 2.0 }, "outputs": { "mana_essence": 1.0 }, "duration": 2.0 },
 		{ "id": "runesteel_ingot", "name": "Craft Runesteel Ingot", "inputs": { "iron_ingot": 1.0, "mana_essence": 1.0 }, "outputs": { "runesteel_ingot": 1.0 }, "duration": 3.0 }
-	],
-	"artifact_altar": [
-		{ "id": "runesteel_amulet", "name": "Craft Runesteel Amulet", "inputs": { "runesteel_ingot": 2.0, "mana_essence": 1.0 }, "outputs": { "runesteel_amulet": 1.0 }, "duration": 5.0 }
 	]
 }

@@ -84,11 +84,16 @@ func _ready() -> void:
 	add_child(hud)
 	hud.mode_changed.connect(_on_hud_mode_changed)
 	hud.reset_game_pressed.connect(_on_reset_pressed)
+	if hud.has_signal("artifact_dropped"):
+		hud.artifact_dropped.connect(_on_artifact_dropped)
 	
 	var inspector_scene = preload("res://scenes/inspector_panel.tscn")
 	inspector_panel = inspector_scene.instantiate()
 	hud.add_child(inspector_panel)
-	inspector_panel.recipe_selected.connect(_on_recipe_selected)
+	if inspector_panel.has_signal("recipe_selected"):
+		inspector_panel.recipe_selected.connect(_on_recipe_selected)
+	if inspector_panel.has_signal("unequip_requested"):
+		inspector_panel.unequip_requested.connect(_on_unequip_requested)
 	
 	# 3.5. Setup Input Controller
 	input_controller = InputController.new()
@@ -414,6 +419,24 @@ func _on_simulation_tick(_ticks: int) -> void:
 	_update_ui()
 	if selected_building_id != 0:
 		_update_inspector()
+
+func _on_artifact_dropped(uid: String, _screen_pos: Vector2) -> void:
+	var m_pos = get_global_mouse_position()
+	var grid_pos = Vector2i(floori(m_pos.x / cell_size), floori(m_pos.y / cell_size))
+	if state.factory.grid.has(grid_pos):
+		var b_id = state.factory.grid[grid_pos]
+		if ArtifactSystem.equip_artifact_to_altar(state, uid, b_id):
+			if is_instance_valid(building_renderer):
+				building_renderer.request_static_redraw()
+			_update_ui()
+			request_save()
+
+func _on_unequip_requested(b_id: int) -> void:
+	if ArtifactSystem.unequip_artifact_from_altar(state, b_id):
+		if is_instance_valid(building_renderer):
+			building_renderer.request_static_redraw()
+		_update_ui()
+		request_save()
 
 func _update_ui() -> void:
 	# Calculate credits income rate

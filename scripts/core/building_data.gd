@@ -22,7 +22,9 @@ const DEFAULT_SIZES: Dictionary = {
 	"crusher": Vector2i(3, 2),
 	"constructor": Vector2i(3, 2),
 	"alchemy_lab": Vector2i(3, 3),
-	"artifact_altar": Vector2i(3, 3)
+	"artifact_altar": Vector2i(4, 4),
+	"shell_forge": Vector2i(3, 3),
+	"vault_gateway": Vector2i(2, 2)
 }
 
 static func get_default_size(building_type: String) -> Vector2i:
@@ -32,7 +34,7 @@ static func get_output_ports_count(building_type: String, recipe_data: Dictionar
 	match building_type:
 		"splitter_2": return 2
 		"splitter_3": return 3
-		"portal", "seller": return 0
+		"portal", "seller", "vault_gateway", "artifact_altar": return 0
 		_:
 			var outputs_dictionary = recipe_data.get("outputs", {})
 			var real_count = 0
@@ -43,7 +45,7 @@ static func get_output_ports_count(building_type: String, recipe_data: Dictionar
 
 static func get_input_ports_count(building_type: String, recipe_data: Dictionary = {}) -> int:
 	match building_type:
-		"miner": return 0
+		"miner", "artifact_altar": return 0
 		"assembler", "infuser":
 			var inputs_dictionary = recipe_data.get("inputs", {})
 			var real_count = 0
@@ -70,6 +72,9 @@ var is_splitter: bool = false
 var is_portal: bool = false
 var is_miner: bool = false
 var is_seller: bool = false
+var is_vault_gateway: bool = false
+
+var held_artifact: Dictionary = {}
 
 # Cached recipe fields
 var _cached_recipe_inputs: Dictionary = {}
@@ -101,6 +106,7 @@ func _init(building_id: int, building_type: String, grid_pos: Vector2i, recipe_d
 	is_portal = (type == "portal")
 	is_miner = type.begins_with("miner")
 	is_seller = type.begins_with("seller")
+	is_vault_gateway = (type == "vault_gateway")
 
 	_update_recipe_cache()
 
@@ -121,7 +127,10 @@ func _update_recipe_cache() -> void:
 
 		for resource_name in _cached_recipe_outputs:
 			outputs[resource_name] = 0.0
-			output_limits[resource_name] = maxf(_cached_recipe_outputs[resource_name] * 10.0, 20.0)
+			if type == "shell_forge":
+				output_limits[resource_name] = 1.0
+			else:
+				output_limits[resource_name] = maxf(_cached_recipe_outputs[resource_name] * 10.0, 20.0)
 	ui_version += 1
 
 ## Returns all grid cell coordinates occupied by this building.
@@ -198,7 +207,8 @@ func to_dict() -> Dictionary:
 		"output_limits": output_limits.duplicate(),
 		"active_recipe": active_recipe.duplicate(),
 		"production_progress": production_progress,
-		"is_producing": is_producing
+		"is_producing": is_producing,
+		"held_artifact": held_artifact.duplicate(true)
 	}
 
 ## Deserializes building data state from dictionary.
@@ -222,4 +232,5 @@ static func from_dict(data_dictionary: Dictionary) -> BuildingData:
 	building_instance.output_limits = data_dictionary.get("output_limits", {}).duplicate()
 	building_instance.production_progress = data_dictionary.get("production_progress", 0.0)
 	building_instance.is_producing = data_dictionary.get("is_producing", false)
+	building_instance.held_artifact = data_dictionary.get("held_artifact", {}).duplicate(true)
 	return building_instance
