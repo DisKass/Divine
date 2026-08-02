@@ -94,6 +94,8 @@ func _ready() -> void:
 		inspector_panel.recipe_selected.connect(_on_recipe_selected)
 	if inspector_panel.has_signal("unequip_requested"):
 		inspector_panel.unequip_requested.connect(_on_unequip_requested)
+	if inspector_panel.has_signal("vault_mode_changed"):
+		inspector_panel.vault_mode_changed.connect(_on_vault_mode_changed)
 	
 	# 3.5. Setup Input Controller
 	input_controller = InputController.new()
@@ -425,15 +427,60 @@ func _on_artifact_dropped(uid: String, _screen_pos: Vector2) -> void:
 	var grid_pos = Vector2i(floori(m_pos.x / cell_size), floori(m_pos.y / cell_size))
 	if state.factory.grid.has(grid_pos):
 		var b_id = state.factory.grid[grid_pos]
-		if ArtifactSystem.equip_artifact_to_altar(state, uid, b_id):
-			if is_instance_valid(building_renderer):
-				building_renderer.request_static_redraw()
-			_update_ui()
-			request_save()
+		var b_data = state.factory.buildings[b_id]
+		
+		if b_data.type == "artifact_altar":
+			if ArtifactSystem.equip_artifact_to_altar(state, uid, b_id):
+				if is_instance_valid(building_renderer):
+					building_renderer.request_static_redraw()
+				_update_ui()
+				request_save()
+		elif b_data.is_the_void:
+			if ArtifactSystem.destroy_artifact(state, uid):
+				_update_ui()
+				request_save()
+		elif b_data.is_vault_gateway and b_data.vault_gateway_mode == "retrieve":
+			if ArtifactSystem.retrieve_artifact_to_vault(state, uid, b_id):
+				_update_ui()
+				request_save()
 
 func _on_unequip_requested(b_id: int) -> void:
 	if ArtifactSystem.unequip_artifact_from_altar(state, b_id):
 		if is_instance_valid(building_renderer):
+			building_renderer.request_static_redraw()
+		_update_ui()
+		request_save()
+
+func _on_vault_mode_changed(building_id: int, new_mode: String) -> void:
+	if not state.factory.buildings.has(building_id):
+		return
+	var b_data = state.factory.buildings[building_id]
+	if b_data.vault_gateway_mode != new_mode:
+		b_data.vault_gateway_mode = new_mode
+		
+		if new_mode == "retrieve":
+			# Swap inputs to outputs
+			for r in b_data.inputs:
+				b_data.outputs[r] = b_data.outputs.get(r, 0.0) + b_data.inputs[r]
+			b_data.inputs.clear()
+			if not b_data.input_artifact.is_empty():
+				b_data.output_artifact = b_data.input_artifact
+				b_data.input_artifact = {}
+		else:
+			# Swap outputs to inputs
+			for r in b_data.outputs:
+				b_data.inputs[r] = b_data.inputs.get(r, 0.0) + b_data.outputs[r]
+			b_data.outputs.clear()
+			if not b_data.output_artifact.is_empty():
+				b_data.input_artifact = b_data.output_artifact
+				b_data.output_artifact = {}
+				
+		state.factory.rebuild_caches()
+		if visuals_map.has(building_id):
+			visuals_map[building_id]._update_ports_cache()
+			
+		if is_instance_valid(building_renderer):
+			building_renderer._culling_dirty = true
 			building_renderer.request_static_redraw()
 		_update_ui()
 		request_save()

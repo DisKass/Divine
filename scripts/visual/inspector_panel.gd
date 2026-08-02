@@ -4,17 +4,40 @@ class_name InspectorPanel
 ## Zone of Responsibility: UI component that displays information about the selected building and manages recipe switching.
 
 signal recipe_selected(recipe_idx: int)
+signal vault_mode_changed(building_id: int, new_mode: String)
 
 @onready var inspector_details: Label = $VBoxContainer/InspectorDetails
 @onready var recipe_container: HBoxContainer = $VBoxContainer/RecipeSelectorContainer
 @onready var recipe_button: OptionButton = $VBoxContainer/RecipeSelectorContainer/RecipeOptionButton
 
 var unequip_btn: Button
+var vault_toggle_btn: Button
+var vault_toggle_rt: RichTextLabel
+var _inspected_vault_mode: String = ""
 
 func _ready() -> void:
 	visible = false
 	recipe_container.visible = false
 	recipe_button.item_selected.connect(_on_recipe_selected)
+	
+	vault_toggle_btn = Button.new()
+	vault_toggle_btn.visible = false
+	vault_toggle_btn.custom_minimum_size = Vector2(0, 32)
+	vault_toggle_btn.pressed.connect(_on_vault_toggle_pressed)
+	
+	var cc = CenterContainer.new()
+	cc.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	cc.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	vault_toggle_btn.add_child(cc)
+	
+	vault_toggle_rt = RichTextLabel.new()
+	vault_toggle_rt.bbcode_enabled = true
+	vault_toggle_rt.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	vault_toggle_rt.fit_content = true
+	vault_toggle_rt.autowrap_mode = TextServer.AUTOWRAP_OFF
+	cc.add_child(vault_toggle_rt)
+	
+	$VBoxContainer.add_child(vault_toggle_btn)
 	
 	unequip_btn = Button.new()
 	unequip_btn.text = "Unequip Artifact"
@@ -30,9 +53,11 @@ func update_inspector_new(b_data: BuildingData, state: GameState) -> void:
 	var show_unequip = false
 	if b_data == null:
 		unequip_btn.visible = false
+		vault_toggle_btn.visible = false
 		visible = false
 		_inspected_building_id = -1
 		_inspected_recipe_id = ""
+		_inspected_vault_mode = ""
 		return
 		
 	visible = true
@@ -89,6 +114,17 @@ func update_inspector_new(b_data: BuildingData, state: GameState) -> void:
 		
 	inspector_details.text = text
 	unequip_btn.visible = show_unequip
+	
+	if b_data.is_vault_gateway:
+		_inspected_vault_mode = b_data.vault_gateway_mode
+		vault_toggle_btn.visible = true
+		if _inspected_vault_mode == "store":
+			vault_toggle_rt.text = "[color=#ffe64d]Store[/color] / Retrieve"
+		else:
+			vault_toggle_rt.text = "Store / [color=#ffe64d]Retrieve[/color]"
+	else:
+		vault_toggle_btn.visible = false
+		_inspected_vault_mode = ""
 
 	var active_recipe_id = b_data.active_recipe.get("id", "")
 	var possible_recipes = Recipes.DATA.get(b_data.type, [])
@@ -144,6 +180,7 @@ func update_multi_inspector(selected_count: int, total_cost: Dictionary = {}, ca
 
 	inspector_details.text = text
 	unequip_btn.visible = false
+	vault_toggle_btn.visible = false
 
 func _on_recipe_selected(idx: int) -> void:
 	recipe_selected.emit(idx)
@@ -152,3 +189,8 @@ signal unequip_requested(building_id: int)
 func _on_unequip_pressed() -> void:
 	if _inspected_building_id != -1:
 		unequip_requested.emit(_inspected_building_id)
+
+func _on_vault_toggle_pressed() -> void:
+	if _inspected_building_id != -1:
+		var new_mode = "retrieve" if _inspected_vault_mode == "store" else "store"
+		vault_mode_changed.emit(_inspected_building_id, new_mode)

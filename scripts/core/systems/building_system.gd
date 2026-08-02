@@ -12,7 +12,7 @@ static var configs_loaded: bool = false
 static func ensure_configs_loaded() -> void:
 	if configs_loaded:
 		return
-	var types = ["portal", "miner", "smelter", "converter", "assembler", "extractor", "infuser", "seller", "splitter_2", "splitter_3", "miner_iron", "miner_coal", "miner_crystal", "crusher", "constructor", "alchemy_lab", "artifact_altar", "shell_forge", "vault_gateway"]
+	var types = ["portal", "miner", "smelter", "converter", "assembler", "extractor", "infuser", "seller", "splitter_2", "splitter_3", "miner_iron", "miner_coal", "miner_crystal", "crusher", "constructor", "alchemy_lab", "artifact_altar", "shell_forge", "vault_gateway", "the_void"]
 	for type in types:
 		var path = "res://data/buildings/" + type + ".tres"
 		if ResourceLoader.exists(path):

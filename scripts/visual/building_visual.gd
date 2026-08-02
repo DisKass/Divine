@@ -72,6 +72,8 @@ func _update_ports_cache() -> void:
 		return
 		
 	var recipe_ctx = {"inputs": data.inputs, "outputs": data.outputs}
+	if data.is_vault_gateway:
+		recipe_ctx["vault_gateway_mode"] = data.vault_gateway_mode
 	var out_count = BuildingData.get_output_ports_count(data.type, recipe_ctx)
 	for i in range(out_count):
 		_cached_out_ports_local.append(_calc_port_global_position(true, i) - global_position)
@@ -114,6 +116,8 @@ func _calc_port_global_position(is_output: bool, port_idx: int) -> Vector2:
 				return Vector2(global_position.x + half_width, global_position.y + offsets[port_idx])
 	
 	var recipe_ctx = {"inputs": data.inputs, "outputs": data.outputs}
+	if data.is_vault_gateway:
+		recipe_ctx["vault_gateway_mode"] = data.vault_gateway_mode
 	var in_count = BuildingData.get_input_ports_count(data.type, recipe_ctx)
 	var out_count = BuildingData.get_output_ports_count(data.type, recipe_ctx)
 	var total_ports = out_count if is_output else in_count

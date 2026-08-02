@@ -163,6 +163,16 @@ const DATA: Dictionary = {
 		}
 	],
 
+	"the_void": [
+		{
+			"id": "void_destroy",
+			"name": "Destroy Items",
+			"inputs": {},
+			"outputs": {},
+			"duration": 1.0
+		}
+	],
+
 	"splitter_2": [
 		{
 			"id": "split_2",

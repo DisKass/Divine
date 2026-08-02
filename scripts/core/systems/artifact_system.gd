@@ -36,14 +36,11 @@ static func ensure_configs_loaded() -> void:
 			artifact_configs[type] = ResourceLoader.load(path)
 	configs_loaded = true
 
-## Attempts to add a new artifact base to the inventory. Returns true if successful.
-static func add_artifact_base_to_inventory(state: GameState, base_id: String) -> bool:
+## Generates a new artifact dictionary from a base_id. Does NOT add it to inventory.
+static func generate_artifact(base_id: String) -> Dictionary:
 	ensure_configs_loaded()
 	if not artifact_configs.has(base_id):
-		return false
-	
-	if state.progress.artifact_inventory.size() >= MAX_INVENTORY_SIZE:
-		return false # Inventory is full
+		return {}
 		
 	var config: ArtifactData = artifact_configs[base_id]
 	var uid = "item_" + str(Time.get_ticks_usec()) + "_" + str(randi() % 10000)
@@ -56,9 +53,17 @@ static func add_artifact_base_to_inventory(state: GameState, base_id: String) ->
 		item.implicit_stats[mod_name] = float(config.implicit_stats[mod_name])
 		
 	# In the future, we will roll prefixes and suffixes here.
-	
-	state.progress.artifact_inventory.append(item.to_dict())
-	state.artifact_crafted.emit(base_id, 1) # Retained for UI updates
+	return item.to_dict()
+
+## Pushes an existing artifact dictionary into the global inventory.
+static func store_artifact_in_vault(state: GameState, item_dict: Dictionary) -> bool:
+	if item_dict.is_empty():
+		return false
+	if state.progress.artifact_inventory.size() >= MAX_INVENTORY_SIZE:
+		return false # Inventory is full
+		
+	state.progress.artifact_inventory.append(item_dict.duplicate(true))
+	state.artifact_crafted.emit(item_dict.get("base_id", "unknown"), 1) # Retained for UI updates
 	state.artifacts_changed.emit()
 	return true
 
@@ -108,5 +113,57 @@ static func unequip_artifact_from_altar(state: GameState, altar_id: int) -> bool
 	altar.held_artifact.clear()
 	
 	altar.ui_version += 1
+	state.artifacts_changed.emit()
+	return true
+
+## Takes an artifact from the UI inventory and puts it into the output buffer of a Vault Gateway (Retrieve).
+static func retrieve_artifact_to_vault(state: GameState, item_uid: String, gateway_id: int) -> bool:
+	var inventory = state.progress.artifact_inventory
+	var item_idx = -1
+	for i in range(inventory.size()):
+		if inventory[i].get("uid", "") == item_uid:
+			item_idx = i
+			break
+			
+	if item_idx == -1:
+		return false
+		
+	var gateway = state.factory.buildings.get(gateway_id)
+	if gateway == null or not gateway.is_vault_gateway:
+		return false
+	
+	if gateway.vault_gateway_mode != "retrieve":
+		return false
+		
+	var item = inventory[item_idx]
+	var base_id = item.get("base_id", "")
+	
+	# Only insert if output buffer is empty
+	var current_output = gateway.outputs.get(base_id, 0.0)
+	if current_output >= 1.0 or not gateway.output_artifact.is_empty():
+		return false # Gateway buffer is full, cannot deposit right now
+		
+	gateway.output_artifact = item.duplicate()
+	gateway.outputs[base_id] = current_output + 1.0
+	
+	inventory.remove_at(item_idx)
+	
+	gateway.ui_version += 1
+	state.artifacts_changed.emit()
+	return true
+
+## Permanently destroys an artifact from the UI inventory (used by The Void).
+static func destroy_artifact(state: GameState, item_uid: String) -> bool:
+	var inventory = state.progress.artifact_inventory
+	var item_idx = -1
+	for i in range(inventory.size()):
+		if inventory[i].get("uid", "") == item_uid:
+			item_idx = i
+			break
+			
+	if item_idx == -1:
+		return false
+		
+	inventory.remove_at(item_idx)
 	state.artifacts_changed.emit()
 	return true

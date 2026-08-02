@@ -24,7 +24,8 @@ const DEFAULT_SIZES: Dictionary = {
 	"alchemy_lab": Vector2i(3, 3),
 	"artifact_altar": Vector2i(4, 4),
 	"shell_forge": Vector2i(3, 3),
-	"vault_gateway": Vector2i(2, 2)
+	"vault_gateway": Vector2i(3, 3),
+	"the_void": Vector2i(3, 3)
 }
 
 static func get_default_size(building_type: String) -> Vector2i:
@@ -34,7 +35,11 @@ static func get_output_ports_count(building_type: String, recipe_data: Dictionar
 	match building_type:
 		"splitter_2": return 2
 		"splitter_3": return 3
-		"portal", "seller", "vault_gateway", "artifact_altar": return 0
+		"portal", "seller", "artifact_altar", "the_void": return 0
+		"vault_gateway":
+			if recipe_data.get("vault_gateway_mode", "store") == "retrieve":
+				return 1
+			return 0
 		_:
 			var outputs_dictionary = recipe_data.get("outputs", {})
 			var real_count = 0
@@ -46,6 +51,10 @@ static func get_output_ports_count(building_type: String, recipe_data: Dictionar
 static func get_input_ports_count(building_type: String, recipe_data: Dictionary = {}) -> int:
 	match building_type:
 		"miner", "artifact_altar": return 0
+		"vault_gateway":
+			if recipe_data.get("vault_gateway_mode", "store") == "retrieve":
+				return 0
+			return 1
 		"assembler", "infuser":
 			var inputs_dictionary = recipe_data.get("inputs", {})
 			var real_count = 0
@@ -73,8 +82,13 @@ var is_portal: bool = false
 var is_miner: bool = false
 var is_seller: bool = false
 var is_vault_gateway: bool = false
+var is_the_void: bool = false
+
+var vault_gateway_mode: String = "store"
 
 var held_artifact: Dictionary = {}
+var input_artifact: Dictionary = {}
+var output_artifact: Dictionary = {}
 
 # Cached recipe fields
 var _cached_recipe_inputs: Dictionary = {}
@@ -107,6 +121,7 @@ func _init(building_id: int, building_type: String, grid_pos: Vector2i, recipe_d
 	is_miner = type.begins_with("miner")
 	is_seller = type.begins_with("seller")
 	is_vault_gateway = (type == "vault_gateway")
+	is_the_void = (type == "the_void")
 
 	_update_recipe_cache()
 
@@ -208,7 +223,10 @@ func to_dict() -> Dictionary:
 		"active_recipe": active_recipe.duplicate(),
 		"production_progress": production_progress,
 		"is_producing": is_producing,
-		"held_artifact": held_artifact.duplicate(true)
+		"vault_gateway_mode": vault_gateway_mode,
+		"held_artifact": held_artifact.duplicate(true),
+		"input_artifact": input_artifact.duplicate(true),
+		"output_artifact": output_artifact.duplicate(true)
 	}
 
 ## Deserializes building data state from dictionary.
@@ -232,5 +250,8 @@ static func from_dict(data_dictionary: Dictionary) -> BuildingData:
 	building_instance.output_limits = data_dictionary.get("output_limits", {}).duplicate()
 	building_instance.production_progress = data_dictionary.get("production_progress", 0.0)
 	building_instance.is_producing = data_dictionary.get("is_producing", false)
+	building_instance.vault_gateway_mode = data_dictionary.get("vault_gateway_mode", "store")
 	building_instance.held_artifact = data_dictionary.get("held_artifact", {}).duplicate(true)
+	building_instance.input_artifact = data_dictionary.get("input_artifact", {}).duplicate(true)
+	building_instance.output_artifact = data_dictionary.get("output_artifact", {}).duplicate(true)
 	return building_instance

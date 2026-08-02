@@ -9,7 +9,7 @@ static func tick(state: GameState, delta: float) -> void:
 		if building_instance.is_splitter:
 			continue
 			
-		if building_instance.is_vault_gateway:
+		if building_instance.is_vault_gateway or building_instance.is_the_void:
 			continue
 
 		if building_instance.active_recipe.is_empty():
@@ -53,6 +53,8 @@ static func tick(state: GameState, delta: float) -> void:
 					var limit = building_instance.output_limits.get(resource_name, 20.0)
 					if building_instance.type == "shell_forge":
 						limit = 1.0
+						var new_artifact = ArtifactSystem.generate_artifact(resource_name)
+						building_instance.output_artifact = new_artifact
 					building_instance.outputs[resource_name] = minf(building_instance.outputs.get(resource_name, 0.0) + building_instance._cached_recipe_outputs[resource_name], limit)
 				building_instance.is_producing = false
 				building_instance.production_progress = 0.0

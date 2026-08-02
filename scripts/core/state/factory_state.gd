@@ -22,6 +22,8 @@ var building_outgoing_connections_map: Dictionary = {}
 var credits_producers: Array[BuildingData] = []
 var portals: Array[BuildingData] = []
 var altars: Array[BuildingData] = []
+var voids: Array[BuildingData] = []
+var vault_gateways: Array[BuildingData] = []
 var temp_visited_splitters: Dictionary = {}
 
 func rebuild_caches() -> void:
@@ -29,6 +31,8 @@ func rebuild_caches() -> void:
 	credits_producers.clear()
 	portals.clear()
 	altars.clear()
+	voids.clear()
+	vault_gateways.clear()
 
 	for building_instance in buildings.values():
 		buildings_list.append(building_instance)
@@ -38,6 +42,10 @@ func rebuild_caches() -> void:
 			portals.append(building_instance)
 		if building_instance.type == "artifact_altar":
 			altars.append(building_instance)
+		if building_instance.type == "the_void":
+			voids.append(building_instance)
+		if building_instance.type == "vault_gateway":
+			vault_gateways.append(building_instance)
 
 	connection_cache.clear()
 	var grouped_by_from: Dictionary = {}
@@ -56,9 +64,19 @@ func rebuild_caches() -> void:
 				if to_building.is_portal:
 					if to_building.input_limits.has(resource_name):
 						cached_resources.append(resource_name)
+				elif to_building.is_the_void:
+					cached_resources.append(resource_name)
+					to_building.inputs[resource_name] = to_building.inputs.get(resource_name, 0.0)
+					to_building.input_limits[resource_name] = 1.0
+				elif to_building.is_vault_gateway:
+					# Vault Gateways only accept known artifact resources
+					if ArtifactSystem.artifact_configs.has(resource_name):
+						cached_resources.append(resource_name)
+						to_building.inputs[resource_name] = to_building.inputs.get(resource_name, 0.0)
+						to_building.input_limits[resource_name] = 1.0
 				elif to_building.is_splitter:
 					cached_resources.append(resource_name)
-				elif from_building.is_splitter:
+				elif from_building.is_splitter or from_building.is_vault_gateway:
 					if to_building.inputs.has(resource_name) or to_building.active_recipe.get("inputs", {}).has(resource_name):
 						to_building.inputs[resource_name] = to_building.inputs.get(resource_name, 0.0)
 						to_building.input_limits[resource_name] = maxf(to_building.input_limits.get(resource_name, 20.0), 20.0)

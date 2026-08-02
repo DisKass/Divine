@@ -21,13 +21,17 @@ static func add_connection(state: FactoryState, from_id: int, to_id: int, from_p
 			if to_building.input_limits.has(output_resource):
 				has_matching_resource = true
 				break
-	elif to_building.is_vault_gateway:
+	elif to_building.is_the_void:
+		has_matching_resource = true
+		for output_resource in from_building.outputs:
+			to_building.inputs[output_resource] = to_building.inputs.get(output_resource, 0.0)
+			to_building.input_limits[output_resource] = 1.0
+	elif to_building.is_vault_gateway or from_building.is_vault_gateway:
+		has_matching_resource = true
 		for output_resource in from_building.outputs:
 			if ArtifactSystem.artifact_configs.has(output_resource):
 				to_building.inputs[output_resource] = to_building.inputs.get(output_resource, 0.0)
 				to_building.input_limits[output_resource] = 1.0
-				has_matching_resource = true
-				break
 	elif to_building.is_splitter or from_building.is_splitter:
 		has_matching_resource = true
 		for output_resource in from_building.outputs:
@@ -167,6 +171,12 @@ static func tick(state: GameState, sell_mult: float = 1.0) -> void:
 					if units_to_move > 0:
 						from_building.outputs[resource_name] -= float(units_to_move)
 						to_building.inputs[resource_name] = to_building.inputs.get(resource_name, 0.0) + float(units_to_move)
+						
+						ArtifactSystem.ensure_configs_loaded()
+						if ArtifactSystem.artifact_configs.has(resource_name):
+							to_building.input_artifact = from_building.output_artifact
+							from_building.output_artifact = {}
+
 						from_building.ui_version += 1
 						to_building.ui_version += 1
 						connection_data["is_active"] = true
@@ -190,20 +200,46 @@ static func tick(state: GameState, sell_mult: float = 1.0) -> void:
 				if amount > 0.0:
 					MilestoneSystem.submit_portal_resource(state, resource_name, amount)
 
+	for void_b in state.factory.voids:
+		void_b.inputs.clear()
+		void_b.input_artifact.clear()
+
+	for vault in state.factory.vault_gateways:
+		if vault.vault_gateway_mode == "store":
+			if not vault.input_artifact.is_empty():
+				if ArtifactSystem.store_artifact_in_vault(state, vault.input_artifact):
+					vault.input_artifact.clear()
+					vault.inputs.clear()
+					vault.ui_version += 1
+
 
 
 static func _try_transfer_to_vault(state: GameState, from_building: BuildingData, from_port: int, vault: BuildingData, to_port: int, resource_name: String, connection_data: Dictionary) -> bool:
+	if vault.vault_gateway_mode == "retrieve":
+		return false
+
+	var target_current = vault.inputs.get(resource_name, 0.0)
+	var target_limit = vault.input_limits.get(resource_name, 1.0)
+	var space_units = floori(target_limit - target_current)
+
+	if space_units <= 0:
+		return false
+
 	ArtifactSystem.ensure_configs_loaded()
 	if not ArtifactSystem.artifact_configs.has(resource_name):
 		return false
 	
-	if ArtifactSystem.add_artifact_base_to_inventory(state, resource_name):
-		from_building.outputs[resource_name] -= 1.0
-		from_building.ui_version += 1
-		connection_data["is_active"] = true
-		state.factory.resource_transferred.emit(from_building.id, from_port, vault.id, to_port, resource_name, 1.0, 1.0)
-		return true
-	return false
+	from_building.outputs[resource_name] -= 1.0
+	vault.inputs[resource_name] = target_current + 1.0
+	
+	vault.input_artifact = from_building.output_artifact
+	from_building.output_artifact = {}
+	
+	from_building.ui_version += 1
+	vault.ui_version += 1
+	connection_data["is_active"] = true
+	state.factory.resource_transferred.emit(from_building.id, from_port, vault.id, to_port, resource_name, 1.0, 1.0)
+	return true
 
 static func _try_transfer_through_splitter(state: GameState, from_building: BuildingData, from_port: int, splitter_building: BuildingData, to_port: int, resource_name: String, connection_data: Dictionary) -> bool:
 	if state.factory.temp_visited_splitters.has(splitter_building.id):
@@ -245,6 +281,12 @@ static func _try_transfer_through_splitter(state: GameState, from_building: Buil
 			if space_units > 0:
 				from_building.outputs[resource_name] -= 1.0
 				target_building.inputs[resource_name] = target_current + 1.0
+				
+				ArtifactSystem.ensure_configs_loaded()
+				if ArtifactSystem.artifact_configs.has(resource_name):
+					target_building.input_artifact = from_building.output_artifact
+					from_building.output_artifact = {}
+				
 				from_building.ui_version += 1
 				target_building.ui_version += 1
 
