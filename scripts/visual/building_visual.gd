@@ -71,14 +71,17 @@ func _update_ports_cache() -> void:
 	if data == null:
 		return
 		
-	var recipe_ctx = {"inputs": data.inputs, "outputs": data.outputs}
-	if data.is_vault_gateway:
-		recipe_ctx["vault_gateway_mode"] = data.vault_gateway_mode
-	var out_count = BuildingData.get_output_ports_count(data.type, recipe_ctx)
+	var out_count = data.output_slots.size()
+	if data.type.begins_with("splitter"):
+		out_count = BuildingData.get_output_ports_count(data.type)
+		
 	for i in range(out_count):
 		_cached_out_ports_local.append(_calc_port_global_position(true, i) - global_position)
 		
-	var in_count = BuildingData.get_input_ports_count(data.type, recipe_ctx)
+	var in_count = data.input_slots.size()
+	if data.type.begins_with("splitter"):
+		in_count = BuildingData.get_input_ports_count(data.type)
+		
 	for i in range(in_count):
 		_cached_in_ports_local.append(_calc_port_global_position(false, i) - global_position)
 
@@ -115,11 +118,14 @@ func _calc_port_global_position(is_output: bool, port_idx: int) -> Vector2:
 				var offsets = [-half_height * 0.55, 0.0, half_height * 0.55]
 				return Vector2(global_position.x + half_width, global_position.y + offsets[port_idx])
 	
-	var recipe_ctx = {"inputs": data.inputs, "outputs": data.outputs}
-	if data.is_vault_gateway:
-		recipe_ctx["vault_gateway_mode"] = data.vault_gateway_mode
-	var in_count = BuildingData.get_input_ports_count(data.type, recipe_ctx)
-	var out_count = BuildingData.get_output_ports_count(data.type, recipe_ctx)
+	var in_count = data.input_slots.size()
+	if data.type.begins_with("splitter"):
+		in_count = BuildingData.get_input_ports_count(data.type)
+		
+	var out_count = data.output_slots.size()
+	if data.type.begins_with("splitter"):
+		out_count = BuildingData.get_output_ports_count(data.type)
+		
 	var total_ports = out_count if is_output else in_count
 	if total_ports <= 0:
 		return global_position
@@ -179,22 +185,33 @@ func update_text_cache() -> bool:
 	if not text_dirty:
 		return false
 	text_dirty = false
-	_cached_title_str = data.type.capitalize()
+	
+	if data.config.ui_title_override != "":
+		_cached_title_str = data.config.ui_title_override
+	else:
+		_cached_title_str = data.type.capitalize()
+		
 	_cached_in_text_lines.clear()
 	_cached_out_text_lines.clear()
 	
 	var font = ThemeDB.fallback_font
 	var max_width = float(data.size_in_cells.x * cell_size - 8)
 	
-	for k in data.inputs:
-		if not k.begins_with("_"):
-			var val = int(round(data.inputs[k]))
-			_cached_in_text_lines.append(format_resource_line(k, val, max_width, font, 9))
+	if data.config.show_input_slots:
+		for slot in data.input_slots:
+			if data.config.hide_empty_slots and slot.is_empty():
+				continue
+			var text = slot.current_item if slot.current_item != "" else (slot.accepted_tags[0] if slot.accepted_tags.size() > 0 else "---")
+			var val = int(round(slot.amount))
+			_cached_in_text_lines.append(format_resource_line(text, val, max_width, font, 9))
 			
-	for k in data.outputs:
-		if not k.begins_with("_") and k != "credits":
-			var val = int(round(data.outputs[k]))
-			_cached_out_text_lines.append(format_resource_line(k, val, max_width, font, 9))
+	if data.config.show_output_slots:
+		for slot in data.output_slots:
+			if data.config.hide_empty_slots and slot.is_empty():
+				continue
+			var text = slot.current_item if slot.current_item != "" else (slot.accepted_tags[0] if slot.accepted_tags.size() > 0 else "---")
+			var val = int(round(slot.amount))
+			_cached_out_text_lines.append(format_resource_line(text, val, max_width, font, 9))
 			
 	_cached_in_multiline_str = "\n".join(_cached_in_text_lines)
 	_cached_out_multiline_str = "\n".join(_cached_out_text_lines)
@@ -229,22 +246,18 @@ func update_culling(visible_world_rect: Rect2, _zoom_level: float = 1.0) -> bool
 func get_input_port_for_resource(res_name: String) -> int:
 	if data == null:
 		return 0
-	var in_keys = []
-	for k in data.inputs.keys():
-		if not k.begins_with("_"):
-			in_keys.append(k)
-	for i in range(in_keys.size()):
-		if in_keys[i] == res_name:
+	for i in range(data.input_slots.size()):
+		if data.input_slots[i].current_item == res_name or data.input_slots[i].can_accept(res_name):
 			return i
 	return 0
-
-
 
 func get_output_port_at_position(click_global_pos: Vector2) -> int:
 	if data == null:
 		return 0
-	var recipe_ctx = {"inputs": data.inputs, "outputs": data.outputs}
-	var total_ports = BuildingData.get_output_ports_count(data.type, recipe_ctx)
+	var total_ports = data.output_slots.size()
+	if data.type.begins_with("splitter"):
+		total_ports = BuildingData.get_output_ports_count(data.type)
+		
 	if total_ports <= 1:
 		return 0
 		

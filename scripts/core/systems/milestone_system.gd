@@ -36,7 +36,8 @@ static func submit_portal_resource(state: GameState, res_name: String, amount: f
 
 	if active_m.requirements.has(res_name):
 		var target = float(active_m.requirements[res_name])
-		state.progress.current_milestone_progress[res_name] = minf(amount, target)
+		var current = float(state.progress.current_milestone_progress.get(res_name, 0.0))
+		state.progress.current_milestone_progress[res_name] = minf(current + amount, target)
 		check_milestone_completion(state)
 
 ## Checks if active milestone is fulfilled and advances to next.

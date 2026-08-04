@@ -6,51 +6,31 @@ extends RefCounted
 
 static func add_connection(state: FactoryState, from_id: int, to_id: int, from_port: int = 0, to_port: int = 0) -> bool:
 	if from_id == to_id:
-		return false # No self-connections
+		return false
 
 	if not state.buildings.has(from_id) or not state.buildings.has(to_id):
 		return false
 
-	var from_building = state.buildings[from_id]
-	var to_building = state.buildings[to_id]
-
-	# Verify that the output of from_building matches at least one input of to_building
-	var has_matching_resource = false
-	if to_building.is_portal:
-		for output_resource in from_building.outputs:
-			if to_building.input_limits.has(output_resource):
-				has_matching_resource = true
-				break
-	elif to_building.is_the_void:
-		has_matching_resource = true
-		for output_resource in from_building.outputs:
-			to_building.inputs[output_resource] = to_building.inputs.get(output_resource, 0.0)
-			to_building.input_limits[output_resource] = 1.0
-	elif to_building.is_vault_gateway or from_building.is_vault_gateway:
-		has_matching_resource = true
-		for output_resource in from_building.outputs:
-			if ArtifactSystem.artifact_configs.has(output_resource):
-				to_building.inputs[output_resource] = to_building.inputs.get(output_resource, 0.0)
-				to_building.input_limits[output_resource] = 1.0
-	elif to_building.is_splitter or from_building.is_splitter:
-		has_matching_resource = true
-		for output_resource in from_building.outputs:
-			to_building.inputs[output_resource] = to_building.inputs.get(output_resource, 0.0)
-			if to_building.is_splitter:
-				to_building.input_limits[output_resource] = 1.0
-			else:
-				to_building.input_limits[output_resource] = maxf(to_building.input_limits.get(output_resource, 20.0), 20.0)
-	else:
-		for output_resource in from_building.outputs:
-			if to_building.inputs.has(output_resource) or to_building.active_recipe.get("inputs", {}).has(output_resource):
-				to_building.inputs[output_resource] = to_building.inputs.get(output_resource, 0.0)
-				to_building.input_limits[output_resource] = maxf(to_building.input_limits.get(output_resource, 20.0), 20.0)
-				has_matching_resource = true
-				break
-
-	if not has_matching_resource:
+	var from_building: BuildingData = state.buildings[from_id]
+	var to_building: BuildingData = state.buildings[to_id]
+	
+	if from_port < 0 or from_port >= from_building.get_port_count(true):
 		return false
-
+	if to_port < 0 or to_port >= to_building.get_port_count(false):
+		return false
+		
+	var source_slot = from_building.get_port_slot(true, from_port)
+	var target_slot = to_building.get_port_slot(false, to_port)
+	
+	if source_slot != null and target_slot != null:
+		var source_res = source_slot.current_item
+		if source_res == "" and source_slot.accepted_tags.size() > 0:
+			source_res = source_slot.accepted_tags[0]
+			
+		if source_res != "":
+			if not target_slot.can_accept(source_res):
+				return false
+	
 	# Remove any existing connection originating from (from_id, from_port)
 	var index = 0
 	while index < state.connections.size():
@@ -88,15 +68,16 @@ static func sync_portal_inputs(state: GameState) -> void:
 	var requirements = milestone_info.get("requirements", {})
 	var progress = milestone_info.get("progress", {})
 
-	for portal in state.factory.portals:
-		for resource_name in portal.inputs.keys():
-			portal.inputs.erase(resource_name)
-			portal.input_limits.erase(resource_name)
-
-		for resource_name in requirements.keys():
-			portal.inputs[resource_name] = float(progress.get(resource_name, 0.0))
-			portal.input_limits[resource_name] = float(requirements[resource_name])
-		portal.ui_version += 1
+	for portal in state.factory.buildings_list:
+		if portal.type == "portal":
+			portal.input_slots.clear()
+			for resource_name in requirements.keys():
+				var req_amount = float(requirements[resource_name])
+				var cur_amount = float(progress.get(resource_name, 0.0))
+				var limit = maxf(req_amount - cur_amount, 0.0)
+				var slot = ItemSlot.new([resource_name], limit)
+				portal.input_slots.append(slot)
+			portal.ui_version += 1
 
 static func tick(state: GameState, sell_mult: float = 1.0) -> void:
 	# Reset transfer activity flags on connections
@@ -111,10 +92,11 @@ static func tick(state: GameState, sell_mult: float = 1.0) -> void:
 			continue
 
 		var from_building_first: BuildingData = outgoing_group[0][0]
+		var out_slots = from_building_first.shared_slots if from_building_first.config.buffer_mode == "shared" else from_building_first.output_slots
 
 		var has_any_output = false
-		for resource_name in from_building_first.outputs:
-			if from_building_first.outputs[resource_name] >= 1.0:
+		for slot in out_slots:
+			if slot.amount >= 1.0:
 				has_any_output = true
 				break
 
@@ -132,119 +114,67 @@ static func tick(state: GameState, sell_mult: float = 1.0) -> void:
 			var connection_data: Dictionary = cache_entry[2]
 			var from_port: int = cache_entry[3]
 			var to_port: int = cache_entry[4]
-			var resources: Array[String] = cache_entry[5]
+			var cached_resources: Array[String] = cache_entry[5] # output tags this connection can handle
 
-			if resources.is_empty():
+			if cached_resources.is_empty():
 				continue
 
-			var num_resources = resources.size()
-			var start_resource_index = int(connection_data.get("last_res_index", 0)) % num_resources
-
-			for i in range(num_resources):
-				var resource_index = (start_resource_index + i) % num_resources
-				var resource_name = resources[resource_index]
-
-				var available_units = floori(from_building.outputs.get(resource_name, 0.0))
-				if available_units <= 0:
+			var transfer_made = false
+			
+			for out_slot in out_slots:
+				if out_slot.amount < 1.0:
 					continue
-
-				if to_building.is_splitter:
-					state.factory.temp_visited_splitters.clear()
-					if _try_transfer_through_splitter(state, from_building, from_port, to_building, to_port, resource_name, connection_data):
-						from_building.last_outgoing_connection_index = (connection_index + 1) % num_connections
-						connection_data["last_res_index"] = (resource_index + 1) % num_resources
+					
+				var res_name = out_slot.current_item
+				if res_name == "": continue
+				
+				# Does this connection support this resource?
+				var supported = false
+				for cr in cached_resources:
+					if res_name == cr or ItemTagSystem.has_tag(res_name, cr):
+						supported = true
 						break
-				elif to_building.is_vault_gateway:
-					if _try_transfer_to_vault(state, from_building, from_port, to_building, to_port, resource_name, connection_data):
-						from_building.last_outgoing_connection_index = (connection_index + 1) % num_connections
-						connection_data["last_res_index"] = (resource_index + 1) % num_resources
+				
+				if not supported:
+					continue
+					
+				var available_units = floori(out_slot.amount)
+				if available_units <= 0: continue
+				
+				if to_building.config.process_logic == "passthrough":
+					state.factory.temp_visited_splitters.clear()
+					if _try_transfer_through_splitter(state, from_building, out_slot, from_port, to_building, to_port, connection_data):
+						transfer_made = true
 						break
 				else:
-					var target_current = to_building.inputs.get(resource_name, 0.0)
-					var target_limit = to_building.input_limits.get(resource_name, 0.0 if to_building.is_portal else 20.0)
-					var space_units = floori(target_limit - target_current)
+					var target_slot = to_building.get_port_slot(false, to_port)
+					
+					if target_slot and target_slot.can_accept(res_name):
+						var space = floori(target_slot.get_available_space())
+						if space > 0:
+							var amount_to_transfer = 1.0 # 1 item per tick per link
+							
+							var pulled = out_slot.pull(amount_to_transfer)
+							target_slot.push(res_name, pulled.amount, pulled.payload)
+							
+							from_building.ui_version += 1
+							to_building.ui_version += 1
+							
+							connection_data["is_active"] = true
+							transfer_made = true
+							state.factory.resource_transferred.emit(from_building.id, from_port, to_building.id, to_port, res_name, 1.0, 1.0)
+							break
+							
+			if transfer_made:
+				from_building.last_outgoing_connection_index = (connection_index + 1) % num_connections
+				break
 
-					if space_units <= 0:
-						continue
-
-					var units_to_move = min(available_units, space_units)
-					if units_to_move > 0:
-						from_building.outputs[resource_name] -= float(units_to_move)
-						to_building.inputs[resource_name] = to_building.inputs.get(resource_name, 0.0) + float(units_to_move)
-						
-						ArtifactSystem.ensure_configs_loaded()
-						if ArtifactSystem.artifact_configs.has(resource_name):
-							to_building.input_artifact = from_building.output_artifact
-							from_building.output_artifact = {}
-
-						from_building.ui_version += 1
-						to_building.ui_version += 1
-						connection_data["is_active"] = true
-						connection_data["last_res_index"] = (resource_index + 1) % num_resources
-						from_building.last_outgoing_connection_index = (connection_index + 1) % num_connections
-						state.factory.resource_transferred.emit(from_building.id, from_port, to_building.id, to_port, resource_name, float(units_to_move), 1.0)
-						break
-
-	# Harvest global credits from outputs, process Portal deliveries & collect crafted Artifacts
-	for building_instance in state.factory.credits_producers:
-		var amount = building_instance.outputs.get("credits", 0.0)
-		if amount > 0.0:
-			ResourceSystem.add_resource(state, "credits", amount * sell_mult)
-			building_instance.outputs["credits"] = 0.0
-
-	for portal in state.factory.portals:
-		var current_keys = portal.inputs.keys()
-		for resource_name in current_keys:
-			if not resource_name.begins_with("_") and portal.inputs.has(resource_name):
-				var amount = float(portal.inputs.get(resource_name, 0.0))
-				if amount > 0.0:
-					MilestoneSystem.submit_portal_resource(state, resource_name, amount)
-
-	for void_b in state.factory.voids:
-		void_b.inputs.clear()
-		void_b.input_artifact.clear()
-
-	for vault in state.factory.vault_gateways:
-		if vault.vault_gateway_mode == "store":
-			if not vault.input_artifact.is_empty():
-				if ArtifactSystem.store_artifact_in_vault(state, vault.input_artifact):
-					vault.input_artifact.clear()
-					vault.inputs.clear()
-					vault.ui_version += 1
-
-
-
-static func _try_transfer_to_vault(state: GameState, from_building: BuildingData, from_port: int, vault: BuildingData, to_port: int, resource_name: String, connection_data: Dictionary) -> bool:
-	if vault.vault_gateway_mode == "retrieve":
-		return false
-
-	var target_current = vault.inputs.get(resource_name, 0.0)
-	var target_limit = vault.input_limits.get(resource_name, 1.0)
-	var space_units = floori(target_limit - target_current)
-
-	if space_units <= 0:
-		return false
-
-	ArtifactSystem.ensure_configs_loaded()
-	if not ArtifactSystem.artifact_configs.has(resource_name):
-		return false
-	
-	from_building.outputs[resource_name] -= 1.0
-	vault.inputs[resource_name] = target_current + 1.0
-	
-	vault.input_artifact = from_building.output_artifact
-	from_building.output_artifact = {}
-	
-	from_building.ui_version += 1
-	vault.ui_version += 1
-	connection_data["is_active"] = true
-	state.factory.resource_transferred.emit(from_building.id, from_port, vault.id, to_port, resource_name, 1.0, 1.0)
-	return true
-
-static func _try_transfer_through_splitter(state: GameState, from_building: BuildingData, from_port: int, splitter_building: BuildingData, to_port: int, resource_name: String, connection_data: Dictionary) -> bool:
+static func _try_transfer_through_splitter(state: GameState, original_from: BuildingData, out_slot: ItemSlot, from_port: int, splitter_building: BuildingData, to_port: int, connection_data: Dictionary) -> bool:
 	if state.factory.temp_visited_splitters.has(splitter_building.id):
 		return false
 	state.factory.temp_visited_splitters[splitter_building.id] = true
+	
+	var res_name = out_slot.current_item
 
 	var outgoing: Array = state.factory.building_outgoing_connections_map.get(splitter_building.id, [])
 	var num_connections = outgoing.size()
@@ -262,40 +192,29 @@ static func _try_transfer_through_splitter(state: GameState, from_building: Buil
 		var splitter_from_port: int = cache_entry[3]
 		var target_to_port: int = cache_entry[4]
 
-		if target_building.is_splitter:
-			if _try_transfer_through_splitter(state, from_building, from_port, target_building, target_to_port, resource_name, connection_data):
-				splitter_building.last_outgoing_connection_index = (connection_index + 1) % num_connections
-				state.factory.resource_transferred.emit(splitter_building.id, splitter_from_port, target_building.id, target_to_port, resource_name, 1.0, 1.0)
-				target_connection_data["is_active"] = true
-				return true
-		elif target_building.is_vault_gateway:
-			if _try_transfer_to_vault(state, from_building, from_port, target_building, target_to_port, resource_name, connection_data):
-				splitter_building.last_outgoing_connection_index = (connection_index + 1) % num_connections
-				state.factory.resource_transferred.emit(splitter_building.id, splitter_from_port, target_building.id, target_to_port, resource_name, 1.0, 1.0)
-				target_connection_data["is_active"] = true
-				return true
-		else:
-			var target_current = target_building.inputs.get(resource_name, 0.0)
-			var target_limit = target_building.input_limits.get(resource_name, 20.0)
-			var space_units = floori(target_limit - target_current)
-			if space_units > 0:
-				from_building.outputs[resource_name] -= 1.0
-				target_building.inputs[resource_name] = target_current + 1.0
-				
-				ArtifactSystem.ensure_configs_loaded()
-				if ArtifactSystem.artifact_configs.has(resource_name):
-					target_building.input_artifact = from_building.output_artifact
-					from_building.output_artifact = {}
-				
-				from_building.ui_version += 1
-				target_building.ui_version += 1
-
+		if target_building.config.process_logic == "passthrough":
+			if _try_transfer_through_splitter(state, original_from, out_slot, from_port, target_building, target_to_port, target_connection_data):
 				splitter_building.last_outgoing_connection_index = (connection_index + 1) % num_connections
 				connection_data["is_active"] = true
-				target_connection_data["is_active"] = true
-
-				state.factory.resource_transferred.emit(from_building.id, from_port, splitter_building.id, to_port, resource_name, 1.0, 1.0)
-				state.factory.resource_transferred.emit(splitter_building.id, splitter_from_port, target_building.id, target_to_port, resource_name, 1.0, 1.0)
 				return true
-
+		else:
+			var target_slot = target_building.get_port_slot(false, target_to_port)
+			
+			if target_slot and target_slot.can_accept(res_name):
+				var space = floori(target_slot.get_available_space())
+				if space > 0:
+					var amount_to_transfer = 1.0
+					
+					var pulled = out_slot.pull(amount_to_transfer)
+					target_slot.push(res_name, pulled.amount, pulled.payload)
+					
+					original_from.ui_version += 1
+					target_building.ui_version += 1
+					
+					splitter_building.last_outgoing_connection_index = (connection_index + 1) % num_connections
+					connection_data["is_active"] = true
+					target_connection_data["is_active"] = true
+					state.factory.resource_transferred.emit(splitter_building.id, splitter_from_port, target_building.id, target_to_port, res_name, 1.0, 1.0)
+					return true
+					
 	return false

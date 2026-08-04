@@ -237,7 +237,7 @@ func _process(delta: float) -> void:
 		if is_instance_valid(vis):
 			if vis.is_flashing and vis._process_port_flashes(delta):
 				dynamic_needs_redraw = true
-			if vis.data and not vis.data.is_portal and not vis.data.active_recipe.is_empty():
+			if vis.data and vis.data.config.process_logic == "recipe" and not vis.data.active_recipe.is_empty():
 				if vis.data.production_progress > 0.0 or vis.data.production_progress != vis.data._cached_duration:
 					# To be perfectly optimal we could track if progress actually changed this frame, 
 					# but since factories run smoothly, it changes every tick/frame anyway.
@@ -298,7 +298,7 @@ func _perform_culling_and_update_multimeshes() -> void:
 		vis.visible = is_in_view
 		if is_in_view:
 			_cached_visible_visuals.append(vis)
-			if vis.data.is_splitter:
+			if vis.data.type.begins_with("splitter"):
 				_cached_splitter_visuals.append(vis)
 			else:
 				_cached_std_visuals.append(vis)
@@ -406,7 +406,7 @@ func _draw_static_layer(canvas: CanvasItem) -> void:
 			
 	var std_visuals: Array[BuildingVisual] = []
 	for vis in all_visuals:
-		if vis.data and not vis.data.is_splitter:
+		if vis.data and not vis.data.type.begins_with("splitter"):
 			std_visuals.append(vis)
 			
 	# Base Borders (NO CULLING)
@@ -603,9 +603,9 @@ func _draw_dynamic_layer(canvas: CanvasItem) -> void:
 		var pb_bg_color = Color(0.04, 0.05, 0.06, 1.0)
 		for vis in _cached_std_visuals:
 			var data = vis.data
-			if data.is_portal or data.active_recipe.is_empty(): continue
+			if data.config.process_logic != "recipe" or data.active_recipe.is_empty(): continue
 				
-			var duration = float(data._cached_duration)
+			var pr = clamp(data.production_progress / maxf(0.01, data._cached_duration), 0.0, 1.0)
 			var size_px = Vector2(data.size_in_cells * vis.cell_size)
 			var top_left = vis.global_position - size_px / 2.0
 			var bar_margin_x = 4.0
@@ -614,10 +614,8 @@ func _draw_dynamic_layer(canvas: CanvasItem) -> void:
 			
 			if bar_width > 4.0:
 				canvas.draw_rect(Rect2(top_left.x + bar_margin_x, bar_y, bar_width, 5.0), pb_bg_color, true)
-				if duration > 0.0:
-					var fill_ratio = clampf(data.production_progress / duration, 0.0, 1.0)
-					if fill_ratio > 0.0:
-						canvas.draw_rect(Rect2(top_left.x + bar_margin_x, bar_y, bar_width * fill_ratio, 5.0), vis.accent_color, true)
+				if pr > 0.0:
+					canvas.draw_rect(Rect2(top_left.x + bar_margin_x, bar_y, bar_width * pr, 5.0), vis.accent_color, true)
 
 	# Selected Building Text (Dynamic)
 	var font = _fallback_font
@@ -625,7 +623,7 @@ func _draw_dynamic_layer(canvas: CanvasItem) -> void:
 	if font != null:
 		var selected_std_visuals: Array[BuildingVisual] = []
 		for vis in _cached_visible_visuals:
-			if (vis.is_selected or vis.is_dragged) and vis.data and not vis.data.is_splitter:
+			if (vis.is_selected or vis.is_dragged) and vis.data and not vis.data.type.begins_with("splitter"):
 				selected_std_visuals.append(vis)
 		if selected_std_visuals.size() > 0:
 			_draw_building_text(canvas, selected_std_visuals, font)

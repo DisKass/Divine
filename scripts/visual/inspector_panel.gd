@@ -103,19 +103,25 @@ func update_inspector_new(b_data: BuildingData, state: GameState) -> void:
 			
 		text += "-------------------------\n"
 		text += "Inputs:\n"
-		for res in b_data.inputs:
-			if not res.begins_with("_"):
-				text += "  - %s: %d / %d\n" % [res, int(round(b_data.inputs[res])), int(round(b_data.input_limits.get(res, 20.0)))]
+		for slot in b_data.input_slots:
+			var res_name = slot.current_item
+			if res_name == "" and slot.accepted_tags.size() > 0:
+				res_name = slot.accepted_tags[0]
+			if res_name != "":
+				text += "  - %s: %d / %d\n" % [res_name.replace("_", " ").capitalize(), int(round(slot.amount)), int(round(slot.capacity))]
 			
 		text += "Outputs:\n"
-		for res in b_data.outputs:
-			if not res.begins_with("_"):
-				text += "  - %s: %d / %d\n" % [res, int(round(b_data.outputs[res])), int(round(b_data.output_limits.get(res, 20.0)))]
+		for slot in b_data.output_slots:
+			var res_name = slot.current_item
+			if res_name == "" and slot.accepted_tags.size() > 0:
+				res_name = slot.accepted_tags[0]
+			if res_name != "":
+				text += "  - %s: %d / %d\n" % [res_name.replace("_", " ").capitalize(), int(round(slot.amount)), int(round(slot.capacity))]
 		
 	inspector_details.text = text
 	unequip_btn.visible = show_unequip
 	
-	if b_data.is_vault_gateway:
+	if b_data.type == "vault_gateway":
 		_inspected_vault_mode = b_data.vault_gateway_mode
 		vault_toggle_btn.visible = true
 		if _inspected_vault_mode == "store":

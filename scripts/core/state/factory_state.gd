@@ -19,33 +19,17 @@ var buildings_list: Array[BuildingData] = []
 var connection_cache: Array = []
 var building_outgoing_connections: Array = []
 var building_outgoing_connections_map: Dictionary = {}
-var credits_producers: Array[BuildingData] = []
-var portals: Array[BuildingData] = []
-var altars: Array[BuildingData] = []
-var voids: Array[BuildingData] = []
-var vault_gateways: Array[BuildingData] = []
 var temp_visited_splitters: Dictionary = {}
+var altars: Array[BuildingData] = []
 
 func rebuild_caches() -> void:
 	buildings_list.clear()
-	credits_producers.clear()
-	portals.clear()
 	altars.clear()
-	voids.clear()
-	vault_gateways.clear()
 
 	for building_instance in buildings.values():
 		buildings_list.append(building_instance)
-		if building_instance.outputs.has("credits"):
-			credits_producers.append(building_instance)
-		if building_instance.type == "portal":
-			portals.append(building_instance)
 		if building_instance.type == "artifact_altar":
 			altars.append(building_instance)
-		if building_instance.type == "the_void":
-			voids.append(building_instance)
-		if building_instance.type == "vault_gateway":
-			vault_gateways.append(building_instance)
 
 	connection_cache.clear()
 	var grouped_by_from: Dictionary = {}
@@ -58,32 +42,34 @@ func rebuild_caches() -> void:
 
 		if from_building and to_building:
 			var cached_resources: Array[String] = []
-			for resource_name in from_building.outputs.keys():
-				if resource_name.begins_with("_"):
-					continue
-				if to_building.is_portal:
-					if to_building.input_limits.has(resource_name):
-						cached_resources.append(resource_name)
-				elif to_building.is_the_void:
-					cached_resources.append(resource_name)
-					to_building.inputs[resource_name] = to_building.inputs.get(resource_name, 0.0)
-					to_building.input_limits[resource_name] = 1.0
-				elif to_building.is_vault_gateway:
-					# Vault Gateways only accept known artifact resources
-					if ArtifactSystem.artifact_configs.has(resource_name):
-						cached_resources.append(resource_name)
-						to_building.inputs[resource_name] = to_building.inputs.get(resource_name, 0.0)
-						to_building.input_limits[resource_name] = 1.0
-				elif to_building.is_splitter:
-					cached_resources.append(resource_name)
-				elif from_building.is_splitter or from_building.is_vault_gateway:
-					if to_building.inputs.has(resource_name) or to_building.active_recipe.get("inputs", {}).has(resource_name):
-						to_building.inputs[resource_name] = to_building.inputs.get(resource_name, 0.0)
-						to_building.input_limits[resource_name] = maxf(to_building.input_limits.get(resource_name, 20.0), 20.0)
-						cached_resources.append(resource_name)
+			
+			var possible_outputs: Array = []
+			var out_slots = from_building.shared_slots if from_building.config.buffer_mode == "shared" else from_building.output_slots
+			for slot in out_slots:
+				for tag in slot.accepted_tags:
+					if not possible_outputs.has(tag):
+						possible_outputs.append(tag)
+						
+			var in_slots = to_building.shared_slots if to_building.config.buffer_mode == "shared" else to_building.input_slots
+						
+			for output_tag in possible_outputs:
+				var is_match = false
+				if to_building.config.process_logic == "passthrough":
+					is_match = true
 				else:
-					if to_building.inputs.has(resource_name):
-						cached_resources.append(resource_name)
+					for in_slot in in_slots:
+						if in_slot.accepted_tags.is_empty():
+							is_match = true
+							break
+						for in_tag in in_slot.accepted_tags:
+							if output_tag == in_tag or ItemTagSystem.has_tag(output_tag, in_tag):
+								is_match = true
+								break
+						if is_match:
+							break
+				
+				if is_match:
+					cached_resources.append(output_tag)
 
 			var cache_entry = [from_building, to_building, connection_data, from_port, to_port, cached_resources]
 			connection_cache.append(cache_entry)

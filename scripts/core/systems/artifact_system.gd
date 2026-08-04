@@ -129,7 +129,7 @@ static func retrieve_artifact_to_vault(state: GameState, item_uid: String, gatew
 		return false
 		
 	var gateway = state.factory.buildings.get(gateway_id)
-	if gateway == null or not gateway.is_vault_gateway:
+	if gateway == null or gateway.type != "vault_gateway":
 		return false
 	
 	if gateway.vault_gateway_mode != "retrieve":
@@ -139,12 +139,13 @@ static func retrieve_artifact_to_vault(state: GameState, item_uid: String, gatew
 	var base_id = item.get("base_id", "")
 	
 	# Only insert if output buffer is empty
-	var current_output = gateway.outputs.get(base_id, 0.0)
-	if current_output >= 1.0 or not gateway.output_artifact.is_empty():
+	var slot = gateway.shared_slots[0]
+	if not slot.is_empty():
 		return false # Gateway buffer is full, cannot deposit right now
 		
-	gateway.output_artifact = item.duplicate()
-	gateway.outputs[base_id] = current_output + 1.0
+	var pushed = slot.push(base_id, 1.0, item.duplicate())
+	if pushed <= 0.0:
+		return false
 	
 	inventory.remove_at(item_idx)
 	

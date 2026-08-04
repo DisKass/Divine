@@ -313,14 +313,13 @@ func _handle_link(building_id: int) -> void:
 			if source_b and target_b:
 				var source_res = ""
 				var out_keys = []
-				for k in source_b.outputs.keys():
-					if not k.begins_with("_"):
-						out_keys.append(k)
-				if not source_b.active_recipe.is_empty():
-					var rec_outs = source_b.active_recipe.get("outputs", {}).keys()
-					for k in rec_outs:
-						if not out_keys.has(k):
-							out_keys.append(k)
+				var out_slots = source_b.shared_slots if source_b.config.buffer_mode == "shared" else source_b.output_slots
+				for slot in out_slots:
+					if slot.current_item != "":
+						out_keys.append(slot.current_item)
+					elif slot.accepted_tags.size() > 0:
+						out_keys.append(slot.accepted_tags[0])
+				
 				if out_keys.size() > 0:
 					var p_idx = clamp(link_source_port, 0, out_keys.size() - 1)
 					source_res = out_keys[p_idx]
@@ -381,11 +380,15 @@ func _create_build_preview() -> void:
 	add_child(build_preview)
 
 func _set_mouse_mode(mode: MouseMode, build_type: String = "") -> void:
-	# Clean up previous mode state
+	var selection_changed = false
 	if link_source_id != 0 and visuals_map.has(link_source_id):
 		visuals_map[link_source_id].is_selected = false
+		selection_changed = true
 	link_source_id = 0
 	link_source_port = 0
+	
+	if selection_changed and is_instance_valid(building_renderer):
+		building_renderer.request_static_redraw()
 	
 	current_mode = mode
 	selected_build_type = build_type
@@ -435,11 +438,11 @@ func _on_artifact_dropped(uid: String, _screen_pos: Vector2) -> void:
 					building_renderer.request_static_redraw()
 				_update_ui()
 				request_save()
-		elif b_data.is_the_void:
+		elif b_data.type == "the_void":
 			if ArtifactSystem.destroy_artifact(state, uid):
 				_update_ui()
 				request_save()
-		elif b_data.is_vault_gateway and b_data.vault_gateway_mode == "retrieve":
+		elif b_data.type == "vault_gateway" and b_data.vault_gateway_mode == "retrieve":
 			if ArtifactSystem.retrieve_artifact_to_vault(state, uid, b_id):
 				_update_ui()
 				request_save()
@@ -459,22 +462,14 @@ func _on_vault_mode_changed(building_id: int, new_mode: String) -> void:
 		b_data.vault_gateway_mode = new_mode
 		
 		if new_mode == "retrieve":
-			# Swap inputs to outputs
-			for r in b_data.inputs:
-				b_data.outputs[r] = b_data.outputs.get(r, 0.0) + b_data.inputs[r]
-			b_data.inputs.clear()
-			if not b_data.input_artifact.is_empty():
-				b_data.output_artifact = b_data.input_artifact
-				b_data.input_artifact = {}
+			# Slots are shared, so the contents are preserved automatically.
+			pass
 		else:
-			# Swap outputs to inputs
-			for r in b_data.outputs:
-				b_data.inputs[r] = b_data.inputs.get(r, 0.0) + b_data.outputs[r]
-			b_data.outputs.clear()
-			if not b_data.output_artifact.is_empty():
-				b_data.input_artifact = b_data.output_artifact
-				b_data.output_artifact = {}
+			pass
+			
+		b_data._update_recipe_cache()
 				
+		b_data.ui_version += 1
 		state.factory.rebuild_caches()
 		if visuals_map.has(building_id):
 			visuals_map[building_id]._update_ports_cache()

@@ -157,8 +157,8 @@ const DATA: Dictionary = {
 		{
 			"id": "vault_deposit",
 			"name": "Deposit to Vault",
-			"inputs": {},
-			"outputs": {},
+			"inputs": { "<artifact>": 1.0 },
+			"outputs": { "<artifact>": 1.0 },
 			"duration": 1.0
 		}
 	],
@@ -167,7 +167,7 @@ const DATA: Dictionary = {
 		{
 			"id": "void_destroy",
 			"name": "Destroy Items",
-			"inputs": {},
+			"inputs": { "<all>": 1.0 },
 			"outputs": {},
 			"duration": 1.0
 		}

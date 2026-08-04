@@ -32,43 +32,45 @@ static func get_default_size(building_type: String) -> Vector2i:
 	return DEFAULT_SIZES.get(building_type, Vector2i(3, 2))
 
 static func get_output_ports_count(building_type: String, recipe_data: Dictionary = {}) -> int:
-	match building_type:
-		"splitter_2": return 2
-		"splitter_3": return 3
-		"portal", "seller", "artifact_altar", "the_void": return 0
-		"vault_gateway":
-			if recipe_data.get("vault_gateway_mode", "store") == "retrieve":
-				return 1
-			return 0
-		_:
-			var outputs_dictionary = recipe_data.get("outputs", {})
-			var real_count = 0
-			for resource_key in outputs_dictionary:
-				if not str(resource_key).begins_with("_"):
-					real_count += 1
-			return max(1, real_count)
+	var cfg = BuildingConfig.get_default_config_for(building_type)
+	if not cfg.show_output_slots:
+		return 0
+	if building_type == "vault_gateway":
+		if recipe_data.get("vault_gateway_mode", "store") == "retrieve":
+			return 1
+		return 0
+	if building_type == "splitter_2": return 2
+	if building_type == "splitter_3": return 3
+	
+	var outputs_dictionary = recipe_data.get("outputs", {})
+	var real_count = 0
+	for resource_key in outputs_dictionary:
+		if not str(resource_key).begins_with("_"):
+			real_count += 1
+	return max(1, real_count)
 
 static func get_input_ports_count(building_type: String, recipe_data: Dictionary = {}) -> int:
-	match building_type:
-		"miner", "artifact_altar": return 0
-		"vault_gateway":
-			if recipe_data.get("vault_gateway_mode", "store") == "retrieve":
-				return 0
-			return 1
-		"assembler", "infuser":
-			var inputs_dictionary = recipe_data.get("inputs", {})
-			var real_count = 0
-			for resource_key in inputs_dictionary:
-				if not str(resource_key).begins_with("_"):
-					real_count += 1
-			return max(2, real_count)
-		_:
-			var inputs_dictionary = recipe_data.get("inputs", {})
-			var real_count = 0
-			for resource_key in inputs_dictionary:
-				if not str(resource_key).begins_with("_"):
-					real_count += 1
-			return max(1, real_count)
+	var cfg = BuildingConfig.get_default_config_for(building_type)
+	if not cfg.show_input_slots:
+		return 0
+	if building_type == "vault_gateway":
+		if recipe_data.get("vault_gateway_mode", "store") == "retrieve":
+			return 0
+		return 1
+	if building_type in ["assembler", "infuser"]:
+		var inputs_dictionary = recipe_data.get("inputs", {})
+		var real_count = 0
+		for resource_key in inputs_dictionary:
+			if not str(resource_key).begins_with("_"):
+				real_count += 1
+		return max(2, real_count)
+	
+	var inputs_dictionary = recipe_data.get("inputs", {})
+	var real_count = 0
+	for resource_key in inputs_dictionary:
+		if not str(resource_key).begins_with("_"):
+			real_count += 1
+	return max(1, real_count)
 
 var id: int
 var type: String
@@ -76,38 +78,27 @@ var grid_position: Vector2i
 var size_in_cells: Vector2i = Vector2i(4, 2)
 var last_outgoing_connection_index: int = 0
 
-# Fast cached type flags
-var is_splitter: bool = false
-var is_portal: bool = false
-var is_miner: bool = false
-var is_seller: bool = false
-var is_vault_gateway: bool = false
-var is_the_void: bool = false
-
 var vault_gateway_mode: String = "store"
-
-var held_artifact: Dictionary = {}
-var input_artifact: Dictionary = {}
-var output_artifact: Dictionary = {}
-
-# Cached recipe fields
-var _cached_recipe_inputs: Dictionary = {}
-var _cached_recipe_outputs: Dictionary = {}
-var _cached_duration: float = 1.0
 
 # UI Dirty Tracker
 var ui_version: int = 0
 
-# Buffers: resource_name (String) -> amount (float)
-var inputs: Dictionary = {}
-var input_limits: Dictionary = {}
-var outputs: Dictionary = {}
-var output_limits: Dictionary = {}
+# Configuration
+var config: BuildingConfig
+
+# New Buffers
+var input_slots: Array[ItemSlot] = []
+var output_slots: Array[ItemSlot] = []
+var shared_slots: Array[ItemSlot] = []
 
 # Active production recipe
 var active_recipe: Dictionary = {}
 var production_progress: float = 0.0
 var is_producing: bool = false
+var _cached_duration: float = 1.0
+
+# Special variables
+var held_artifact: Dictionary = {}
 
 func _init(building_id: int, building_type: String, grid_pos: Vector2i, recipe_data: Dictionary = {}, size_cells: Vector2i = Vector2i.ZERO) -> void:
 	id = building_id
@@ -115,37 +106,57 @@ func _init(building_id: int, building_type: String, grid_pos: Vector2i, recipe_d
 	grid_position = grid_pos
 	active_recipe = recipe_data
 	size_in_cells = size_cells if size_cells != Vector2i.ZERO else get_default_size(building_type)
-
-	is_splitter = type.begins_with("splitter")
-	is_portal = (type == "portal")
-	is_miner = type.begins_with("miner")
-	is_seller = type.begins_with("seller")
-	is_vault_gateway = (type == "vault_gateway")
-	is_the_void = (type == "the_void")
+	config = BuildingConfig.get_default_config_for(building_type)
 
 	_update_recipe_cache()
 
 func _update_recipe_cache() -> void:
-	_cached_recipe_inputs = active_recipe.get("inputs", {})
-	_cached_recipe_outputs = active_recipe.get("outputs", {})
 	_cached_duration = float(active_recipe.get("duration", 1.0))
+	
+	input_slots.clear()
+	output_slots.clear()
+	
+	if config.buffer_mode != "shared":
+		shared_slots.clear()
 
-	inputs.clear()
-	outputs.clear()
-	input_limits.clear()
-	output_limits.clear()
+	var _cached_recipe_inputs = active_recipe.get("inputs", {})
+	var _cached_recipe_outputs = active_recipe.get("outputs", {})
+	
+	var cap_multiplier = 10.0
+	var default_limit = 20.0
+	
+	if type == "vault_gateway":
+		cap_multiplier = 1.0
+		default_limit = 1.0
+		if shared_slots.is_empty():
+			var slot = ItemSlot.new(["<artifact>"], default_limit)
+			shared_slots.append(slot)
+		
+		# Assign references depending on mode
+		if vault_gateway_mode == "store":
+			input_slots.append(shared_slots[0])
+		else:
+			output_slots.append(shared_slots[0])
+	else:
+		if config.buffer_mode == "separated":
+			if config.show_input_slots:
+				for resource_name in _cached_recipe_inputs:
+					if not str(resource_name).begins_with("_"):
+						var limit = maxf(float(_cached_recipe_inputs[resource_name]) * cap_multiplier, default_limit)
+						input_slots.append(ItemSlot.new([resource_name], limit))
+						
+			if config.show_output_slots:
+				for resource_name in _cached_recipe_outputs:
+					if not str(resource_name).begins_with("_"):
+						var limit = maxf(float(_cached_recipe_outputs[resource_name]) * cap_multiplier, default_limit)
+						if type == "shell_forge":
+							limit = 1.0
+						output_slots.append(ItemSlot.new([resource_name], limit))
+						
+			if config.process_logic == "passthrough":
+				# Splitter needs an input slot but it's empty tags
+				input_slots.append(ItemSlot.new([], 20.0))
 
-	if not active_recipe.is_empty():
-		for resource_name in _cached_recipe_inputs:
-			inputs[resource_name] = 0.0
-			input_limits[resource_name] = maxf(_cached_recipe_inputs[resource_name] * 10.0, 20.0)
-
-		for resource_name in _cached_recipe_outputs:
-			outputs[resource_name] = 0.0
-			if type == "shell_forge":
-				output_limits[resource_name] = 1.0
-			else:
-				output_limits[resource_name] = maxf(_cached_recipe_outputs[resource_name] * 10.0, 20.0)
 	ui_version += 1
 
 ## Returns all grid cell coordinates occupied by this building.
@@ -163,70 +174,68 @@ func set_recipe(new_recipe_data: Dictionary) -> void:
 	is_producing = false
 	_update_recipe_cache()
 
-## Simulates a single tick of duration `delta` (usually 1.0 second).
-## Note: This will be moved to ProductionSystem, but kept here temporarily for compatibility.
-func tick(delta: float = 1.0, speed_multiplier: float = 1.0) -> void:
-	if is_splitter:
-		return
+## Returns the number of physical ports the building has (used for link validation).
+func get_port_count(is_output: bool) -> int:
+	if type.begins_with("splitter"):
+		if is_output:
+			return BuildingData.get_output_ports_count(type)
+		else:
+			return BuildingData.get_input_ports_count(type)
+	if is_output:
+		return output_slots.size()
+	else:
+		return input_slots.size()
 
-	if active_recipe.is_empty():
-		return
-
-	var effective_delta = delta * speed_multiplier
-
-	if not is_producing:
-		# Check if we have enough inputs
-		var can_start = true
-		for resource_name in _cached_recipe_inputs:
-			if inputs.get(resource_name, 0.0) < _cached_recipe_inputs[resource_name]:
-				can_start = false
-				break
-
-		# Check if output buffers have enough space for the batch
-		if can_start:
-			for resource_name in _cached_recipe_outputs:
-				if outputs.get(resource_name, 0.0) + _cached_recipe_outputs[resource_name] > output_limits.get(resource_name, 20.0):
-					can_start = false
-					break
-
-		if can_start:
-			# Consume inputs immediately at start of cycle
-			for resource_name in _cached_recipe_inputs:
-				inputs[resource_name] -= _cached_recipe_inputs[resource_name]
-			is_producing = true
-			production_progress = 0.0
-			ui_version += 1
-
-	if is_producing:
-		production_progress += effective_delta
-		if production_progress >= _cached_duration - 0.0001: # Avoid floating point issues
-			# Complete production: add products to outputs
-			for resource_name in _cached_recipe_outputs:
-				var limit = output_limits.get(resource_name, 20.0)
-				outputs[resource_name] = minf(outputs.get(resource_name, 0.0) + _cached_recipe_outputs[resource_name], limit)
-			is_producing = false
-			production_progress = 0.0
-			ui_version += 1
+## Returns the ItemSlot corresponding to the physical port index.
+func get_port_slot(is_output: bool, port_idx: int) -> ItemSlot:
+	if type.begins_with("splitter"):
+		# Splitters only have 1 logical input slot and 0 logical output slots (passthrough)
+		if not is_output and input_slots.size() > 0:
+			return input_slots[0]
+		return null
+		
+	var target_array = output_slots if is_output else input_slots
+	if config.buffer_mode == "shared":
+		if type == "vault_gateway":
+			# Vault gateway uses shared_slots[0] for either input (store) or output (retrieve)
+			if (vault_gateway_mode == "store" and not is_output) or (vault_gateway_mode == "retrieve" and is_output):
+				if shared_slots.size() > 0:
+					return shared_slots[0]
+			return null
+		target_array = shared_slots
+		
+	if port_idx >= 0 and port_idx < target_array.size():
+		return target_array[port_idx]
+	return null
 
 
 ## Serializes building data state to dictionary.
 func to_dict() -> Dictionary:
+	var input_slots_data = []
+	for slot in input_slots:
+		input_slots_data.append(slot.to_dict())
+		
+	var output_slots_data = []
+	for slot in output_slots:
+		output_slots_data.append(slot.to_dict())
+		
+	var shared_slots_data = []
+	for slot in shared_slots:
+		shared_slots_data.append(slot.to_dict())
+		
 	return {
 		"id": id,
 		"type": type,
 		"grid_position": [grid_position.x, grid_position.y],
 		"size_in_cells": [size_in_cells.x, size_in_cells.y],
-		"inputs": inputs.duplicate(),
-		"input_limits": input_limits.duplicate(),
-		"outputs": outputs.duplicate(),
-		"output_limits": output_limits.duplicate(),
+		"input_slots": input_slots_data,
+		"output_slots": output_slots_data,
+		"shared_slots": shared_slots_data,
 		"active_recipe": active_recipe.duplicate(),
 		"production_progress": production_progress,
 		"is_producing": is_producing,
 		"vault_gateway_mode": vault_gateway_mode,
-		"held_artifact": held_artifact.duplicate(true),
-		"input_artifact": input_artifact.duplicate(true),
-		"output_artifact": output_artifact.duplicate(true)
+		"held_artifact": held_artifact.duplicate()
 	}
 
 ## Deserializes building data state from dictionary.
@@ -236,22 +245,23 @@ static func from_dict(data_dictionary: Dictionary) -> BuildingData:
 	var parsed_size = get_default_size(data_dictionary.get("type", ""))
 
 	var building_instance = BuildingData.new(int(data_dictionary["id"]), data_dictionary["type"], parsed_position, parsed_recipe, parsed_size)
-
-	var raw_inputs: Dictionary = data_dictionary.get("inputs", {})
-	for resource_name in raw_inputs:
-		building_instance.inputs[resource_name] = roundf(float(raw_inputs[resource_name]))
-
-	building_instance.input_limits = data_dictionary.get("input_limits", {}).duplicate()
-
-	var raw_outputs: Dictionary = data_dictionary.get("outputs", {})
-	for resource_name in raw_outputs:
-		building_instance.outputs[resource_name] = roundf(float(raw_outputs[resource_name]))
-
-	building_instance.output_limits = data_dictionary.get("output_limits", {}).duplicate()
+	
 	building_instance.production_progress = data_dictionary.get("production_progress", 0.0)
 	building_instance.is_producing = data_dictionary.get("is_producing", false)
 	building_instance.vault_gateway_mode = data_dictionary.get("vault_gateway_mode", "store")
-	building_instance.held_artifact = data_dictionary.get("held_artifact", {}).duplicate(true)
-	building_instance.input_artifact = data_dictionary.get("input_artifact", {}).duplicate(true)
-	building_instance.output_artifact = data_dictionary.get("output_artifact", {}).duplicate(true)
+	building_instance.held_artifact = data_dictionary.get("held_artifact", {}).duplicate()
+	
+	# After _init, slots are created based on recipe. We load amounts into them.
+	var in_slots_data = data_dictionary.get("input_slots", [])
+	for i in range(min(in_slots_data.size(), building_instance.input_slots.size())):
+		building_instance.input_slots[i].load_from_dict(in_slots_data[i])
+		
+	var out_slots_data = data_dictionary.get("output_slots", [])
+	for i in range(min(out_slots_data.size(), building_instance.output_slots.size())):
+		building_instance.output_slots[i].load_from_dict(out_slots_data[i])
+		
+	var shared_slots_data = data_dictionary.get("shared_slots", [])
+	for i in range(min(shared_slots_data.size(), building_instance.shared_slots.size())):
+		building_instance.shared_slots[i].load_from_dict(shared_slots_data[i])
+
 	return building_instance
