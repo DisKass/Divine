@@ -132,15 +132,23 @@ func _ready() -> void:
 func _initialize_game() -> void:
 	state = GameState.new()
 	
-	if not SaveSystem.load_game(state):
+	var save_info: Dictionary = {}
+	var is_loaded = SaveSystem.load_game(state, save_info)
+	if not is_loaded:
 		ResourceSystem.add_resource(state, "credits", 85.0)
 		
 	ticker = SimulationTicker.new(state)
+	
+	if is_loaded and save_info.get("timestamp", 0) > 0:
+		var offline_data = ticker.catch_up_offline(save_info["timestamp"])
+		if offline_data.get("elapsed", 0) >= 5 and offline_data.get("simulated_ticks", 0) > 0:
+			_show_offline_catchup_popup(offline_data)
 	
 	for b_id in state.factory.buildings:
 		_create_building_visual(state.factory.buildings[b_id])
 		
 	ticker.time_accumulator = 0.0
+
 
 	state.milestone_completed.connect(func(_t, _d):
 		if state:

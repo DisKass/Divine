@@ -68,8 +68,9 @@ static func wait_save_finished() -> void:
 
 
 ## Loads simulation state from disk and applies it directly to the provided GameState object.
+## If out_metadata dictionary is passed, populates it with save metadata (e.g. timestamp).
 ## Returns true if load was successful, false otherwise.
-static func load_game(state: GameState) -> bool:
+static func load_game(state: GameState, out_metadata: Dictionary = {}) -> bool:
 	if not FileAccess.file_exists(SAVE_PATH):
 		return false
 
@@ -92,11 +93,15 @@ static func load_game(state: GameState) -> bool:
 		printerr("Invalid data type in save file.")
 		return false
 
+	out_metadata["timestamp"] = int(data.get("timestamp", 0))
+	out_metadata["version"] = int(data.get("version", 0))
+
 	# For new v4 format
 	if data.has("game_state"):
 		state.load_from_dict(data["game_state"])
 		UpgradeSystem.rebuild_modifiers(state)
 		return true
+
 
 	# Legacy fallback (v3)
 	var net_dict = data.get("network", {})

@@ -3,6 +3,10 @@
 Этот файл содержит хронологию хода работы над игрой. Каждая запись соответствует утвержденному плану реализации фичи, плану рефакторинга, тикету или выполненному коммиту.
 
 ---
+### [2026-08-11] 🚀 **[Коммит]** Fix Offline Production Catch-up
+- **Conversation ID:** 3890ed23-cc4b-4076-b08f-f1aa46a41b10
+- **Описание:** Исправлен расчет оффлайн-добычи при старте игры. В `SaveSystem.load_game` добавлено извлечение `timestamp` из файла сохранения, а в `MainGame._initialize_game` подключен вызов `ticker.catch_up_offline()` и вызов диалога `_show_offline_catchup_popup()`.
+
 ### [2026-08-11] 🚀 **[Коммит]** Forced Save on Game Exit
 - **Conversation ID:** 3890ed23-cc4b-4076-b08f-f1aa46a41b10
 - **Описание:** Добавлено принудительное синхронное сохранение при закрытии приложения (`NOTIFICATION_WM_CLOSE_REQUEST` и `NOTIFICATION_EXIT_TREE`). Добавлены методы `save_game_sync()` и `wait_save_finished()` в `SaveSystem`, устранены откаты прогресса при выходе из игры.
