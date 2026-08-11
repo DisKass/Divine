@@ -39,6 +39,34 @@ static func save_game(state: GameState) -> bool:
 
 	return true
 
+## Synchronously saves simulation state to disk, waiting for any ongoing async save to complete.
+static func save_game_sync(state: GameState) -> bool:
+	if state == null:
+		return false
+
+	# Synchronize active snapshot before saving
+	TemplateSystem.sync_active_snapshot(state)
+
+	var save_data = {
+		"version": SAVE_VERSION,
+		"timestamp": int(Time.get_unix_time_from_system()),
+		"game_state": state.to_dict()
+	}
+
+	if _save_thread != null and _save_thread.is_started():
+		_save_thread.wait_to_finish()
+		_save_thread = null
+
+	_thread_save(save_data)
+	return true
+
+## Waits for any active background save thread to finish.
+static func wait_save_finished() -> void:
+	if _save_thread != null and _save_thread.is_started():
+		_save_thread.wait_to_finish()
+		_save_thread = null
+
+
 ## Loads simulation state from disk and applies it directly to the provided GameState object.
 ## Returns true if load was successful, false otherwise.
 static func load_game(state: GameState) -> bool:

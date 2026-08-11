@@ -187,8 +187,18 @@ func _reset(clear_save: bool = false) -> void:
 	for b_id in state.factory.buildings:
 		_create_building_visual(state.factory.buildings[b_id])
 
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_CLOSE_REQUEST or what == NOTIFICATION_EXIT_TREE:
+		force_save_on_exit()
+
+func force_save_on_exit() -> void:
+	if state != null:
+		SaveSystem.save_game_sync(state)
+		_needs_save = false
+
 func request_save() -> void:
 	_needs_save = true
+
 
 func _process(delta: float) -> void:
 	# Run simulation ticker ticks
