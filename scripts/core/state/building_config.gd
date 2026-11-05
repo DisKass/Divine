@@ -59,5 +59,10 @@ static func get_default_config_for(building_type: String) -> BuildingConfig:
 			cfg.show_input_slots = false
 		"artifact_altar":
 			cfg.process_logic = "forge_artifact"
+		"shell_infuser":
+			cfg.process_logic = "shell_infuser"
+		"purifier":
+			cfg.process_logic = "purifier"
+
 			
 	return cfg

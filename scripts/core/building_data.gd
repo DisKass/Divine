@@ -24,9 +24,12 @@ const DEFAULT_SIZES: Dictionary = {
 	"alchemy_lab": Vector2i(3, 3),
 	"artifact_altar": Vector2i(4, 4),
 	"shell_forge": Vector2i(3, 3),
+	"shell_infuser": Vector2i(4, 4),
+	"purifier": Vector2i(3, 3),
 	"vault_gateway": Vector2i(3, 3),
 	"the_void": Vector2i(3, 3)
 }
+
 
 static func get_default_size(building_type: String) -> Vector2i:
 	return DEFAULT_SIZES.get(building_type, Vector2i(3, 2))
@@ -99,6 +102,10 @@ var _cached_duration: float = 1.0
 
 # Special variables
 var held_artifact: Dictionary = {}
+var idle_time: float = 0.0
+var was_interrupted: bool = false
+var active_accel_bonus: float = 0.0
+
 
 func _init(building_id: int, building_type: String, grid_pos: Vector2i, recipe_data: Dictionary = {}, size_cells: Vector2i = Vector2i.ZERO) -> void:
 	id = building_id
@@ -143,15 +150,18 @@ func _update_recipe_cache() -> void:
 				for resource_name in _cached_recipe_inputs:
 					if not str(resource_name).begins_with("_"):
 						var limit = maxf(float(_cached_recipe_inputs[resource_name]) * cap_multiplier, default_limit)
+						if resource_name == "<artifact>" or ItemTagSystem.has_tag(resource_name, "<artifact>"):
+							limit = 1.0
 						input_slots.append(ItemSlot.new([resource_name], limit))
 						
 			if config.show_output_slots:
 				for resource_name in _cached_recipe_outputs:
 					if not str(resource_name).begins_with("_"):
 						var limit = maxf(float(_cached_recipe_outputs[resource_name]) * cap_multiplier, default_limit)
-						if type == "shell_forge":
+						if resource_name == "<artifact>" or ItemTagSystem.has_tag(resource_name, "<artifact>") or type in ["shell_forge", "shell_infuser", "purifier"]:
 							limit = 1.0
 						output_slots.append(ItemSlot.new([resource_name], limit))
+
 						
 			if config.process_logic == "passthrough":
 				# Splitter needs an input slot but it's empty tags

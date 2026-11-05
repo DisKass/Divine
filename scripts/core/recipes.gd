@@ -153,6 +153,27 @@ const DATA: Dictionary = {
 		}
 	],
 
+	"shell_infuser": [
+		{
+			"id": "infuse_artifact",
+			"name": "Infuse Artifact",
+			"inputs": { "<artifact>": 1.0, "mana_essence": 3.0 },
+			"outputs": { "<artifact>": 1.0 },
+			"duration": 5.0
+		}
+	],
+
+	"purifier": [
+		{
+			"id": "purify_artifact",
+			"name": "Purify Artifact",
+			"inputs": { "<artifact>": 1.0 },
+			"outputs": { "<artifact>": 1.0 },
+			"duration": 3.0
+		}
+	],
+
+
 	"vault_gateway": [
 		{
 			"id": "vault_deposit",

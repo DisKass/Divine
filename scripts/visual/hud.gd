@@ -40,9 +40,12 @@ const BUILDING_DESCRIPTIONS: Dictionary = {
 	"splitter_3": "Split 3 Outputs",
 	"artifact_altar": "Equip Artifact",
 	"shell_forge": "Craft Base",
+	"shell_infuser": "Infuse 3-6 Affixes",
+	"purifier": "Clear Artifact Mods",
 	"vault_gateway": "Store Item",
 	"the_void": "Destroy Items"
 }
+
 
 var fps_label: Label
 var _last_visible_count: int = 0
@@ -135,7 +138,7 @@ func _process(_delta: float) -> void:
 			fps_label.add_theme_color_override("font_color", Color(0.95, 0.3, 0.3))
 
 func _create_build_buttons() -> void:
-	var card_types = ["portal", "miner", "smelter", "converter", "assembler", "extractor", "infuser", "seller", "splitter_2", "splitter_3", "artifact_altar", "shell_forge", "vault_gateway", "the_void"]
+	var card_types = ["portal", "miner", "smelter", "converter", "assembler", "extractor", "infuser", "seller", "splitter_2", "splitter_3", "artifact_altar", "shell_forge", "shell_infuser", "purifier", "vault_gateway", "the_void"]
 	for b_type in card_types:
 		_create_building_card(build_tools_hbox, b_type)
 		
@@ -158,10 +161,13 @@ func _get_accent_color(type: String) -> Color:
 		"splitter_2", "splitter_3": return Color(0.9, 0.9, 0.3)
 		"artifact_altar": return Color(0.8, 0.4, 1.0)
 		"shell_forge": return Color(0.8, 0.3, 0.4)
+		"shell_infuser": return Color(0.9, 0.4, 0.7)
+		"purifier": return Color(0.3, 0.85, 0.9)
 		"vault_gateway": return Color(0.4, 0.7, 0.9)
 		"the_void": return Color(0.2, 0.1, 0.3)
 		"demolish": return Color(0.95, 0.25, 0.25)
 		_: return Color(0.7, 0.7, 0.7)
+
 
 func _create_card_style(accent_color: Color, state: String) -> StyleBoxFlat:
 	var style = StyleBoxFlat.new()
@@ -359,7 +365,8 @@ func update_hud_new(state: GameState, credits_per_tick: float, current_mode: int
 	if tool_buttons.has(active_btn_name):
 		tool_buttons[active_btn_name].button_pressed = true
 		
-	var card_types = ["portal", "miner", "smelter", "converter", "assembler", "extractor", "infuser", "seller", "splitter_2", "splitter_3", "artifact_altar", "shell_forge", "vault_gateway", "the_void"]
+	var card_types = ["portal", "miner", "smelter", "converter", "assembler", "extractor", "infuser", "seller", "splitter_2", "splitter_3", "artifact_altar", "shell_forge", "shell_infuser", "purifier", "vault_gateway", "the_void"]
+
 	for b_type in card_types:
 		if tool_buttons.has(b_type):
 			var btn: Button = tool_buttons[b_type]

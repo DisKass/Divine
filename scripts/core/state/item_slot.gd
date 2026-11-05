@@ -15,12 +15,34 @@ func is_empty() -> bool:
 	return amount <= 0.0
 
 func is_full() -> bool:
+	if current_item != "" and ItemTagSystem.has_tag(current_item, "<artifact>"):
+		return amount >= 1.0
+	for tag in accepted_tags:
+		if tag == "<artifact>" or ItemTagSystem.has_tag(tag, "<artifact>"):
+			return amount >= 1.0
 	return amount >= capacity
 
 func get_available_space() -> float:
-	return maxf(0.0, capacity - amount)
+	var max_cap = capacity
+	if current_item != "" and ItemTagSystem.has_tag(current_item, "<artifact>"):
+		max_cap = 1.0
+	else:
+		for tag in accepted_tags:
+			if tag == "<artifact>" or ItemTagSystem.has_tag(tag, "<artifact>"):
+				max_cap = 1.0
+				break
+	return maxf(0.0, max_cap - amount)
+
+## Returns true if this slot contains a non-zero item that matches the required resource_name or tag.
+func matches_resource(resource_name_or_tag: String) -> bool:
+	if is_empty():
+		return false
+	return ItemTagSystem.has_tag(current_item, resource_name_or_tag)
 
 func can_accept(item: String) -> bool:
+	if ItemTagSystem.has_tag(item, "<artifact>") and amount >= 1.0:
+		return false
+
 	if is_full():
 		return false
 	
@@ -41,7 +63,16 @@ func push(item: String, push_amount: float, new_payload: Dictionary = {}) -> flo
 	if not can_accept(item):
 		return 0.0
 		
-	var space = get_available_space()
+	var max_cap = capacity
+	if ItemTagSystem.has_tag(item, "<artifact>"):
+		max_cap = 1.0
+	else:
+		for tag in accepted_tags:
+			if tag == "<artifact>" or ItemTagSystem.has_tag(tag, "<artifact>"):
+				max_cap = 1.0
+				break
+				
+	var space = maxf(0.0, max_cap - amount)
 	var actual_amount = minf(space, push_amount)
 	
 	if actual_amount > 0:
@@ -91,3 +122,12 @@ func load_from_dict(data: Dictionary) -> void:
 	amount = float(data.get("amount", 0.0))
 	capacity = float(data.get("capacity", 20.0))
 	payload = data.get("payload", {}).duplicate(true)
+	
+	for t in accepted_tags:
+		if t == "<artifact>" or ItemTagSystem.has_tag(t, "<artifact>"):
+			capacity = 1.0
+			break
+	if current_item != "" and ItemTagSystem.has_tag(current_item, "<artifact>"):
+		capacity = 1.0
+	if capacity <= 1.0 and amount > 1.0:
+		amount = 1.0

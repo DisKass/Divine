@@ -251,6 +251,28 @@ func get_input_port_for_resource(res_name: String) -> int:
 			return i
 	return 0
 
+func get_input_port_at_position(click_global_pos: Vector2, max_distance: float = -1.0) -> int:
+	if data == null:
+		return 0
+	var total_ports = data.input_slots.size()
+	if data.type.begins_with("splitter"):
+		total_ports = BuildingData.get_input_ports_count(data.type)
+		
+	if total_ports <= 1:
+		return 0
+		
+	var best_idx = 0
+	var best_dist = INF
+	for i in range(total_ports):
+		var port_pos = get_port_global_position(false, i)
+		var dist = click_global_pos.distance_to(port_pos)
+		if dist < best_dist:
+			best_dist = dist
+			best_idx = i
+	if max_distance > 0.0 and best_dist > max_distance:
+		return -1
+	return best_idx
+
 func get_output_port_at_position(click_global_pos: Vector2) -> int:
 	if data == null:
 		return 0

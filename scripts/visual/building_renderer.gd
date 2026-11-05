@@ -237,7 +237,7 @@ func _process(delta: float) -> void:
 		if is_instance_valid(vis):
 			if vis.is_flashing and vis._process_port_flashes(delta):
 				dynamic_needs_redraw = true
-			if vis.data and vis.data.config.process_logic == "recipe" and not vis.data.active_recipe.is_empty():
+			if vis.data and vis.data.config.process_logic in ["recipe", "shell_infuser", "purifier", "forge_artifact"] and not vis.data.active_recipe.is_empty():
 				if vis.data.production_progress > 0.0 or vis.data.production_progress != vis.data._cached_duration:
 					# To be perfectly optimal we could track if progress actually changed this frame, 
 					# but since factories run smoothly, it changes every tick/frame anyway.
@@ -266,7 +266,8 @@ func _draw() -> void:
 	for vis in _cached_visible_visuals:
 		if vis.data and vis.data.type == "artifact_altar" and not vis.data.held_artifact.is_empty():
 			var item = ItemData.from_dict(vis.data.held_artifact)
-			var aoe = item.aoe_size
+			var aoe = item.get_effective_aoe_size()
+
 			if aoe > 0:
 				var size_px = Vector2(vis.data.size_in_cells * vis.cell_size)
 				var top_left = vis.global_position - size_px / 2.0
@@ -489,7 +490,8 @@ func _draw_building_text(canvas: CanvasItem, std_visuals: Array[BuildingVisual],
 			
 			canvas.draw_string(font, Vector2(tl.x, text_y), a_name, HORIZONTAL_ALIGNMENT_CENTER, sz.x, 11, Color(0.9, 0.9, 0.4))
 			text_y += 16.0
-			canvas.draw_string(font, Vector2(tl.x, text_y), "AoE: %d" % item.aoe_size, HORIZONTAL_ALIGNMENT_CENTER, sz.x, 10, Color(1.0, 0.9, 0.7))
+			canvas.draw_string(font, Vector2(tl.x, text_y), "AoE: %d" % item.get_effective_aoe_size(), HORIZONTAL_ALIGNMENT_CENTER, sz.x, 10, Color(1.0, 0.9, 0.7))
+
 			text_y += 18.0
 			
 			var stats = item.get_all_modifier_names()
@@ -603,7 +605,8 @@ func _draw_dynamic_layer(canvas: CanvasItem) -> void:
 		var pb_bg_color = Color(0.04, 0.05, 0.06, 1.0)
 		for vis in _cached_std_visuals:
 			var data = vis.data
-			if data.config.process_logic != "recipe" or data.active_recipe.is_empty(): continue
+			if data.config.process_logic in ["void", "passthrough"] or data.active_recipe.is_empty(): continue
+
 				
 			var pr = clamp(data.production_progress / maxf(0.01, data._cached_duration), 0.0, 1.0)
 			var size_px = Vector2(data.size_in_cells * vis.cell_size)

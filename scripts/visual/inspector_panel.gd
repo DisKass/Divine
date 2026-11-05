@@ -89,11 +89,17 @@ func update_inspector_new(b_data: BuildingData, state: GameState) -> void:
 			var base_cfg = ArtifactSystem.artifact_configs.get(item.base_id)
 			var a_name = base_cfg.name if base_cfg else item.base_id
 			text += "Artifact: %s\n" % a_name
-			text += "AoE Size: %d\n" % item.aoe_size
+			text += "AoE Size: %d\n" % item.get_effective_aoe_size()
+
 			text += "--- Stats ---\n"
-			for mod in item.get_all_modifier_names():
-				text += "  +%s: %.2f\n" % [mod.capitalize(), item.get_modifier_total(mod)]
+			var lines = item.get_formatted_affix_lines()
+			if lines.is_empty():
+				text += "  (White Artifact - No Affixes)\n"
+			else:
+				for line in lines:
+					text += "  • %s\n" % line
 			show_unequip = true
+
 	else:
 		if not b_data.active_recipe.is_empty():
 			text += "Recipe: %s\n" % b_data.active_recipe.get("name", b_data.active_recipe.get("id", "Unknown"))

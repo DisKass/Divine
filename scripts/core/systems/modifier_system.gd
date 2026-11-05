@@ -34,10 +34,10 @@ static func get_bonus(state: GameState, modifier_name: String, building: Buildin
 		for altar in state.factory.altars:
 			if not altar.held_artifact.is_empty():
 				var item = ItemData.from_dict(altar.held_artifact)
-				var aoe = item.aoe_size
+				var aoe = item.aoe_size + item.get_aoe_bonus()
 				var altar_rect = Rect2i(altar.grid_position - Vector2i(aoe, aoe), altar.size_in_cells + Vector2i(aoe * 2, aoe * 2))
 				
 				if altar_rect.intersects(target_rect):
-					total_bonus += item.get_modifier_total(modifier_name)
+					total_bonus += item.get_modifier_value_for_building(modifier_name, building.type)
 					
 	return total_bonus

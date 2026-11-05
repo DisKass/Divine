@@ -163,10 +163,16 @@ func update_panel() -> void:
 			title_lbl.text = config.name if config else item.base_id
 			
 			var desc_parts = []
-			desc_parts.append("AoE: %d" % item.aoe_size)
-			for mod in item.get_all_modifier_names():
-				desc_parts.append("%s: +%.2f" % [mod.capitalize(), item.get_modifier_total(mod)])
-			desc_lbl.text = ", ".join(desc_parts)
+			desc_parts.append("AoE: %d" % item.get_effective_aoe_size())
+
+			var lines = item.get_formatted_affix_lines()
+			if lines.is_empty():
+				desc_parts.append("(White)")
+			else:
+				for line in lines:
+					desc_parts.append(line)
+			desc_lbl.text = "\n".join(desc_parts)
+
 			
 			card.visible = true
 			card.set("item_uid", item.uid)

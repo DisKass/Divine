@@ -308,6 +308,41 @@ func _handle_build(grid_pos: Vector2i) -> void:
 
 var link_source_port: int = 0
 
+func _resolve_building_output_resource(building: BuildingData, port_idx: int, visited: Dictionary = {}) -> String:
+	if building == null or visited.has(building.id):
+		return ""
+	visited[building.id] = true
+	
+	# 1. Standard building with dedicated output slots
+	var out_slots = building.shared_slots if building.config.buffer_mode == "shared" else building.output_slots
+	var out_keys = []
+	for slot in out_slots:
+		if slot.current_item != "":
+			out_keys.append(slot.current_item)
+		elif slot.accepted_tags.size() > 0:
+			out_keys.append(slot.accepted_tags[0])
+			
+	if out_keys.size() > 0:
+		var p_idx = clamp(port_idx, 0, out_keys.size() - 1)
+		return out_keys[p_idx]
+		
+	# 2. If building buffer currently contains an item (e.g. splitter input slot)
+	for slot in building.input_slots:
+		if slot.current_item != "":
+			return slot.current_item
+			
+	# 3. Look up upstream connection feeding this building
+	for conn in state.factory.connections:
+		if int(conn.get("to_id", 0)) == building.id:
+			var upstream_b = state.factory.buildings.get(int(conn.get("from_id", 0)))
+			var upstream_port = int(conn.get("from_port", 0))
+			if upstream_b:
+				var res = _resolve_building_output_resource(upstream_b, upstream_port, visited)
+				if res != "":
+					return res
+					
+	return ""
+
 func _handle_link(building_id: int) -> void:
 	if building_id == 0:
 		return # Must click a building
@@ -329,20 +364,20 @@ func _handle_link(building_id: int) -> void:
 			var target_vis = visuals_map.get(building_id)
 			
 			if source_b and target_b:
-				var source_res = ""
-				var out_keys = []
-				var out_slots = source_b.shared_slots if source_b.config.buffer_mode == "shared" else source_b.output_slots
-				for slot in out_slots:
-					if slot.current_item != "":
-						out_keys.append(slot.current_item)
-					elif slot.accepted_tags.size() > 0:
-						out_keys.append(slot.accepted_tags[0])
+				var source_res = _resolve_building_output_resource(source_b, link_source_port)
 				
-				if out_keys.size() > 0:
-					var p_idx = clamp(link_source_port, 0, out_keys.size() - 1)
-					source_res = out_keys[p_idx]
+				# First check if user clicked explicitly near a specific input port (within 24 px)
+				var manual_port = -1
+				if is_instance_valid(target_vis) and target_vis.has_method("get_input_port_at_position"):
+					manual_port = target_vis.get_input_port_at_position(get_global_mouse_position(), 24.0)
 					
-				if source_res != "" and is_instance_valid(target_vis):
+				if manual_port != -1:
+					var manual_slot = target_b.get_port_slot(false, manual_port)
+					if source_res == "" or (manual_slot != null and manual_slot.can_accept(source_res)):
+						target_port = manual_port
+					elif source_res != "" and is_instance_valid(target_vis):
+						target_port = target_vis.get_input_port_for_resource(source_res)
+				elif source_res != "" and is_instance_valid(target_vis):
 					target_port = target_vis.get_input_port_for_resource(source_res)
 					
 			FlowSystem.add_connection(state.factory, link_source_id, building_id, link_source_port, target_port)
